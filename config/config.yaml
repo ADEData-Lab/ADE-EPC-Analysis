@@ -19,58 +19,36 @@
 
 # Project Settings
 project:
-  name: "Heat Street EPC London Analysis"
-  version: "1.0.0"
-  author: "Heat Street Project Team"
+  name: "ADE EPC Analysis - England and Wales"
+  version: "2.0.0"
+  author: "ADE Policy Team"
+  description: "National domestic EPC analysis for heat decarbonisation policy"
 
 # Geographic Scope
 geography:
-  region: "London"
-  boroughs:
-    - "Barking and Dagenham"
-    - "Barnet"
-    - "Bexley"
-    - "Brent"
-    - "Bromley"
-    - "Camden"
-    - "City of London"
-    - "Croydon"
-    - "Ealing"
-    - "Enfield"
-    - "Greenwich"
-    - "Hackney"
-    - "Hammersmith and Fulham"
-    - "Haringey"
-    - "Harrow"
-    - "Havering"
-    - "Hillingdon"
-    - "Hounslow"
-    - "Islington"
-    - "Kensington and Chelsea"
-    - "Kingston upon Thames"
-    - "Lambeth"
-    - "Lewisham"
-    - "Merton"
-    - "Newham"
-    - "Redbridge"
-    - "Richmond upon Thames"
-    - "Southwark"
-    - "Sutton"
-    - "Tower Hamlets"
-    - "Waltham Forest"
-    - "Wandsworth"
-    - "Westminster"
+  scope: "England and Wales"
+  # Analysis levels (hierarchical)
+  levels:
+    - national          # England and Wales aggregate
+    - regional          # Government Office Regions
+    - local_authority   # Local Authority Districts
+    - constituency      # Parliamentary constituencies
+
+  # Optional: specific regions to analyze (null = all)
+  regions_filter: null  # e.g., ["South East", "London", "North West"]
+
+  # Optional: specific local authorities (null = all)
+  local_authorities_filter: null
 
 # Property Filters
 property_filters:
-  construction_period:
-    start_year: null  # Any pre-1930
-    end_year: 1930
-  property_types:
-    - "Mid-terrace"
-    - "End-terrace"
-    - "Terraced"
-  exclude_conversions: true
+  # Include all domestic properties
+  include_all_domestic: true
+
+  # Optional: exclude specific property types if needed
+  exclude_property_types: []  # e.g., ["Flat"] if focusing on houses only
+
+  # Certificate recency (years from present)
   certificate_recency_years: 10
 
 # Data Quality Thresholds
@@ -88,28 +66,40 @@ data_quality:
     - "walls_description"
     - "heating_system"
 
+# ADE Policy Metrics Configuration
+policy_metrics:
+  # Enable/disable specific analyses
+  heating_fuel_analysis: true     # Current fuel mix, electrification rate
+  heat_pump_potential: true       # Suitability assessment, barrier analysis
+  heat_network_potential: true    # Heat density, priority areas
+  demand_reduction: true          # Fabric improvement potential, savings
+
+  # Heat pump suitability criteria
+  heat_pump:
+    min_epc_for_direct_install: "D"  # Properties EPC D+ may be suitable as-is
+    max_heat_demand_kwh_m2: 150      # Annual heat demand threshold
+    require_insulated_walls: false   # If true, require wall insulation
+    require_loft_insulation_mm: 100  # Minimum loft insulation (mm)
+
+  # Heat network heat density thresholds (kWh/m/year)
+  heat_network:
+    high_density_threshold: 3000     # High priority areas
+    medium_density_threshold: 1500   # Medium priority areas
+    low_density_threshold: 500       # Low priority areas
+
+  # Demand reduction targets
+  demand_reduction:
+    target_epc_band: "C"             # National target
+    fabric_improvement_priority: true # Focus on fabric-first approach
+
 # Analysis Parameters
 analysis:
-  case_street: "Shakespeare Crescent"
   epc_bands: ["A", "B", "C", "D", "E", "F", "G"]
 
-  # Heat Network Zone Tiers
-  heat_network_tiers:
-    tier_1:
-      name: "Adjacent to existing network"
-      distance_meters: 250
-    tier_2:
-      name: "Within planned HNZ"
-      criteria: "inside_hnz_boundary"
-    tier_3:
-      name: "High heat density"
-      threshold_kwh_per_m: 3000
-    tier_4:
-      name: "Moderate heat density"
-      threshold_kwh_per_m: 1500
-    tier_5:
-      name: "Low heat density"
-      threshold_kwh_per_m: 0
+  # Sample case studies (optional)
+  case_studies:
+    enabled: false
+    areas: []  # e.g., specific postcodes or streets
 
 # Scenario Modeling
 scenarios:

@@ -178,25 +178,24 @@ class EPCDataValidator:
             df: EPC DataFrame
 
         Returns:
-            DataFrame with inconsistent built forms flagged/removed
+            DataFrame with inconsistent built forms flagged (but not removed)
         """
         logger.info("Validating built form consistency...")
         initial_count = len(df)
 
         if 'BUILT_FORM' in df.columns and 'PROPERTY_TYPE' in df.columns:
-            # Check for logical inconsistencies
-            # E.g., detached property flagged as terrace
+            # Flag obvious inconsistencies (but don't remove - can be useful for analysis)
+            # E.g., flat flagged as detached, or house flagged as flat
             inconsistent_mask = (
-                (df['PROPERTY_TYPE'].str.contains('Terrace', case=False, na=False)) &
-                (df['BUILT_FORM'].str.contains('Detached', case=False, na=False))
+                ((df['PROPERTY_TYPE'] == 'Flat') & (df['BUILT_FORM'].str.contains('Detached|Semi|Terrace', case=False, na=False))) |
+                ((df['PROPERTY_TYPE'] == 'House') & (df['BUILT_FORM'].str.contains('Flat', case=False, na=False)))
             )
 
             inconsistent_count = inconsistent_mask.sum()
             logger.info(f"Found {inconsistent_count:,} records with inconsistent built form")
 
-            # Flag for potential exclusion
+            # Flag but don't remove - may still be usable
             df['built_form_consistent'] = ~inconsistent_mask
-            df = df[df['built_form_consistent']].copy()
 
             self.validation_report['inconsistent_built_form'] = inconsistent_count
         else:
@@ -260,7 +259,7 @@ class EPCDataValidator:
 
     def validate_construction_dates(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Validate construction dates match age band criteria.
+        Validate construction dates - check for missing/invalid age bands.
 
         Args:
             df: EPC DataFrame
@@ -272,28 +271,19 @@ class EPCDataValidator:
         initial_count = len(df)
 
         if 'CONSTRUCTION_AGE_BAND' in df.columns:
-            # Flag properties with age bands suggesting post-1930 construction
-            post_1930_bands = [
-                '1930-1949',
-                '1950-1966',
-                '1967-1975',
-                '1976-1982',
-                '1983-1990',
-                '1991-1995',
-                '1996-2002',
-                '2003-2006',
-                '2007-2011',
-                '2012 onwards'
-            ]
+            # Just check for missing values
+            missing_dates = df['CONSTRUCTION_AGE_BAND'].isna().sum()
 
-            post_1930_mask = df['CONSTRUCTION_AGE_BAND'].isin(post_1930_bands)
-            mismatch_count = post_1930_mask.sum()
+            if missing_dates > 0:
+                logger.info(f"Found {missing_dates:,} records with missing construction age band")
 
-            if mismatch_count > 0:
-                logger.info(f"Found {mismatch_count:,} records with post-1930 age bands")
-                df = df[~post_1930_mask].copy()
+            # Log distribution for info
+            age_dist = df['CONSTRUCTION_AGE_BAND'].value_counts()
+            logger.info("Construction age band distribution:")
+            for band, count in age_dist.head(10).items():
+                logger.info(f"  {band}: {count:,}")
 
-            self.validation_report['construction_date_mismatches'] = mismatch_count
+            self.validation_report['construction_date_mismatches'] = 0  # No longer filtering
         else:
             logger.warning("CONSTRUCTION_AGE_BAND column not found")
 

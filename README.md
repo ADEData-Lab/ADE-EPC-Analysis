@@ -1,25 +1,52 @@
-# Heat Street EPC Analysis
+# ADE EPC Analysis - England and Wales
 
-Large-scale Energy Performance Certificate (EPC) analysis for London's Edwardian terraced housing stock, with a focus on decarbonization pathways and heat network zone planning.
+National-scale Energy Performance Certificate (EPC) analysis for domestic properties across England and Wales, focusing on ADE's heat decarbonisation policy objectives.
 
 ## Project Overview
 
-This project analyzes approximately 500,000 EPC certificates for Edwardian and late Victorian terraced houses across London's 33 boroughs to:
+This project analyzes all domestic EPC certificates across England and Wales (~20M+ properties) to inform ADE policy priorities:
 
-- **Characterize** the current state of the housing stock (insulation, heating systems, energy efficiency)
-- **Model** different decarbonization pathways (fabric improvements, heat pumps, district heating)
-- **Analyze** heat network zone suitability and optimal technology deployment strategies
-- **Evaluate** policy interventions and subsidy mechanisms
+- **Heating Fuel Mix** - Current fuel sources, off-gas properties, electrification rate
+- **Heat Pump Potential** - Suitability assessment, barrier analysis, deployment readiness
+- **Heat Network Potential** - Heat density analysis, priority areas for networks
+- **Demand Reduction** - Fabric improvement potential, energy savings opportunities
+
+Analysis is provided at multiple geographic levels: National → Regional → Local Authority → Parliamentary Constituency
+
+## Transformation Status (December 2024)
+
+This repository has been transformed from **Heat Street EPC** (London Edwardian terraced houses) to **ADE EPC Analysis** (England & Wales all domestic properties).
+
+### ✅ Completed
+- Dashboard removed
+- Configuration updated for national scope
+- **New modules created:**
+  - `src/acquisition/epc_bulk_downloader.py` - DESNZ bulk file downloader
+  - `src/utils/geography_lookup.py` - Geographic hierarchies (national/regional/LA/constituency)
+  - `src/analysis/heating_fuel_analysis.py` - Fuel mix and electrification analysis
+  - `src/analysis/heat_pump_potential.py` - Heat pump suitability assessment
+
+### 🚧 In Progress
+- Heat network potential module
+- Demand reduction analysis module
+- Simplified data validator (remove Edwardian-specific filters)
+- Updated main pipeline
+- Geographic enrichment workflow
+
+### 📋 To Do
+- Update visualizations for national scale
+- Update documentation
+- Test with sample data
+- Performance optimization for large dataset (20M+ properties)
 
 ## Key Features
 
-✅ **Comprehensive Data Pipeline**: Automated EPC data acquisition, cleaning, and validation
-✅ **Quality Assurance**: Implements Hardy & Glew validation protocols (addresses 36-62% error rate in EPCs)
-✅ **Archetype Analysis**: Detailed characterization of building fabric, heating systems, and energy performance
-✅ **Scenario Modeling**: Cost-benefit analysis for multiple decarbonization pathways
-✅ **Spatial Analysis**: GIS-based heat network zone overlay and property classification
-✅ **Policy Analysis**: Subsidy sensitivity modeling and carbon abatement cost calculations
-✅ **Visualization**: Charts, maps, and executive summary reports
+✅ **Bulk Data Processing**: DESNZ bulk file downloader for full England & Wales dataset
+✅ **Geographic Hierarchies**: Analysis at national, regional, local authority, and constituency levels
+✅ **Policy-Focused Metrics**: Four core ADE policy objectives (fuel mix, heat pumps, heat networks, demand reduction)
+✅ **Quality Assurance**: Implements Hardy & Glew validation protocols
+✅ **Scalable Architecture**: Chunked processing for 20M+ properties
+✅ **Flexible Configuration**: Easy to filter by region, local authority, or other criteria
 
 ## Project Structure
 
