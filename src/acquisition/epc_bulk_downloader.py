@@ -284,14 +284,14 @@ class EPCBulkDownloader:
                     logger.info(f"Saving intermediate batch ({total_records:,} records so far)...")
                     temp_df = pd.concat(all_chunks, ignore_index=True)
 
-                    # Clean data types before saving to parquet
-                    temp_df = self._clean_dataframe_for_parquet(temp_df)
-
                     # Save or append
                     if output_path.exists():
                         # Append to existing file
                         existing_df = pd.read_parquet(output_path)
                         temp_df = pd.concat([existing_df, temp_df], ignore_index=True)
+
+                    # Clean data types AFTER concatenation before saving to parquet
+                    temp_df = self._clean_dataframe_for_parquet(temp_df)
 
                     temp_df.to_parquet(output_path, index=False)
                     all_chunks = []
@@ -301,12 +301,12 @@ class EPCBulkDownloader:
             logger.info(f"Saving final batch ({total_records:,} total records)...")
             final_df = pd.concat(all_chunks, ignore_index=True)
 
-            # Clean data types before saving to parquet
-            final_df = self._clean_dataframe_for_parquet(final_df)
-
             if output_path.exists():
                 existing_df = pd.read_parquet(output_path)
                 final_df = pd.concat([existing_df, final_df], ignore_index=True)
+
+            # Clean data types AFTER concatenation before saving to parquet
+            final_df = self._clean_dataframe_for_parquet(final_df)
 
             final_df.to_parquet(output_path, index=False)
 
