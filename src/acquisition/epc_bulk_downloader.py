@@ -230,9 +230,8 @@ class EPCBulkDownloader:
         # Convert all object columns to strings to avoid mixed type issues
         for col in df.columns:
             if df[col].dtype == 'object':
-                df[col] = df[col].astype(str)
-                # Replace 'nan' strings with empty strings
-                df[col] = df[col].replace('nan', '')
+                # Handle NaN and mixed types explicitly
+                df[col] = df[col].apply(lambda x: '' if pd.isna(x) else str(x))
 
         return df
 
