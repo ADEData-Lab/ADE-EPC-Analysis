@@ -215,6 +215,27 @@ class EPCBulkDownloader:
             logger.error(f"Error reading CSV {csv_path}: {e}")
             raise
 
+    def _clean_dataframe_for_parquet(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Clean dataframe for parquet conversion by ensuring consistent types.
+
+        Converts all object columns to strings to avoid mixed type issues.
+
+        Args:
+            df: DataFrame to clean
+
+        Returns:
+            Cleaned DataFrame
+        """
+        # Convert all object columns to strings to avoid mixed type issues
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                df[col] = df[col].astype(str)
+                # Replace 'nan' strings with empty strings
+                df[col] = df[col].replace('nan', '')
+
+        return df
+
     def combine_bulk_data(
         self,
         csv_paths: List[Path],
@@ -261,6 +282,9 @@ class EPCBulkDownloader:
                     logger.info(f"Saving intermediate batch ({total_records:,} records so far)...")
                     temp_df = pd.concat(all_chunks, ignore_index=True)
 
+                    # Clean data types before saving to parquet
+                    temp_df = self._clean_dataframe_for_parquet(temp_df)
+
                     # Save or append
                     if output_path.exists():
                         # Append to existing file
@@ -274,6 +298,9 @@ class EPCBulkDownloader:
         if all_chunks:
             logger.info(f"Saving final batch ({total_records:,} total records)...")
             final_df = pd.concat(all_chunks, ignore_index=True)
+
+            # Clean data types before saving to parquet
+            final_df = self._clean_dataframe_for_parquet(final_df)
 
             if output_path.exists():
                 existing_df = pd.read_parquet(output_path)
