@@ -56,6 +56,9 @@ def phase_1_data_acquisition():
     console.print("[cyan]This phase downloads bulk EPC data from DESNZ[/cyan]")
     console.print("[yellow]Warning: Files are large (~5GB compressed, ~20GB uncompressed)[/yellow]")
     console.print()
+    console.print("[cyan]Note: Downloading England data only (Wales requires manual download)[/cyan]")
+    console.print("[dim]See MANUAL_DOWNLOAD_GUIDE.md for Wales data instructions[/dim]")
+    console.print()
 
     # Check if data already exists
     combined_file = DATA_RAW_DIR / "epc_england_wales_combined.parquet"
@@ -76,7 +79,7 @@ def phase_1_data_acquisition():
 
     try:
         output_path = downloader.download_and_process_all(
-            regions=["england", "wales"],
+            regions=["england"],  # Wales requires manual download (authentication required)
             force_redownload=False,
             extract=True,
             combine=True

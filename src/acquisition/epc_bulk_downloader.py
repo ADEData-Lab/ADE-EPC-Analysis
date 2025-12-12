@@ -35,9 +35,12 @@ class EPCBulkDownloader:
 
     # Available bulk file identifiers
     # Note: Actual filenames may vary - check the downloads page
+    # Wales download requires authentication since 2024
+    # Direct URL access returns HTML login page
+    # Users must download manually from https://epc.opendatacommunities.org/downloads
     BULK_FILES = {
-        "england": "all-domestic-certificates.zip",
-        "wales": "domestic-wales.zip"
+        "england": "all-domestic-certificates.zip",  # England only (not combined)
+        "wales": "domestic-wales.zip"  # Requires authentication
     }
 
     def __init__(self):
@@ -101,6 +104,22 @@ class EPCBulkDownloader:
                     for chunk in response.iter_content(chunk_size=8192):
                         f.write(chunk)
                         pbar.update(len(chunk))
+
+            # Validate that downloaded file is a valid ZIP file
+            try:
+                with zipfile.ZipFile(output_path, 'r') as test_zip:
+                    test_zip.namelist()  # Quick validation
+            except zipfile.BadZipFile:
+                # File is not a ZIP - likely HTML error page
+                output_path.unlink()  # Delete invalid file
+                error_msg = (
+                    f"Downloaded file for {region} is not a valid ZIP file.\n"
+                    f"The DESNZ website now requires authentication.\n"
+                    f"Please download manually from: https://epc.opendatacommunities.org/downloads\n"
+                    f"See MANUAL_DOWNLOAD_GUIDE.md for instructions."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
 
             logger.info(f"Downloaded: {output_path}")
             logger.info(f"File size: {output_path.stat().st_size / (1024**3):.2f} GB")
