@@ -227,11 +227,14 @@ class EPCBulkDownloader:
         Returns:
             Cleaned DataFrame
         """
+        # Make a copy to avoid modifying the original
+        df = df.copy()
+
         # Convert all object columns to strings to avoid mixed type issues
         for col in df.columns:
             if df[col].dtype == 'object':
-                # Handle NaN and mixed types explicitly
-                df[col] = df[col].apply(lambda x: '' if pd.isna(x) else str(x))
+                # Fill NaN with empty string, then convert everything to string
+                df[col] = df[col].fillna('').astype(str)
 
         return df
 
