@@ -51,28 +51,31 @@ This repository has been transformed from **Heat Street EPC** (London Edwardian 
 ## Project Structure
 
 ```
-HeatStreetEPC/
+ADE-EPC-Analysis/
 ├── config/
-│   ├── config.yaml           # Main configuration file
-│   └── config.py             # Configuration loader
 ├── data/
-│   ├── raw/                  # Raw EPC data files
-│   ├── processed/            # Cleaned and validated data
-│   ├── supplementary/        # Heat map and boundary files
-│   └── outputs/              # Analysis outputs, figures, reports
+│   ├── external/
+│   ├── outputs/
+│   ├── processed/
+│   └── supplementary/
+├── docs/
+├── old dashboard/
 ├── src/
-│   ├── acquisition/          # EPC data download modules
-│   ├── cleaning/             # Data validation and cleaning
-│   ├── analysis/             # Archetype characterization
-│   ├── modeling/             # Scenario modeling
-│   ├── spatial/              # Heat network zone analysis
-│   ├── reporting/            # Visualization and reporting
-│   └── utils/                # Utility functions
-├── tests/                    # Unit tests
-├── docs/                     # Additional documentation
-├── notebooks/                # Jupyter notebooks for exploration
-├── main.py                   # Main pipeline orchestrator
-└── requirements.txt          # Python dependencies
+│   ├── acquisition/
+│   ├── analysis/
+│   ├── cleaning/
+│   ├── modeling/
+│   ├── reporting/
+│   ├── spatial/
+│   └── utils/
+├── tests/
+├── main.py
+├── run_ade_analysis.py
+├── run_analysis.py
+├── generate_dashboard_data.py
+├── validate_outputs.py
+├── requirements.txt
+└── requirements-spatial.txt
 ```
 
 ## Installation
