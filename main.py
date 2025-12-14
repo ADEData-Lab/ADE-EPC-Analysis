@@ -44,4 +44,5 @@ def main(log_file: Path | None = None) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    setup_logging()
+    run_national_pipeline()
