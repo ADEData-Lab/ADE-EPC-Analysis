@@ -110,7 +110,13 @@ class AnalysisLogger:
             'description': description
         }
 
-    def add_output(self, output_path: str, output_type: str = "file", description: str = ""):
+    def add_output(
+        self,
+        output_path: str,
+        output_type: str = "file",
+        description: str = "",
+        calculation_details: str = "",
+    ):
         """
         Add an output file/artifact to the current phase.
 
@@ -118,6 +124,7 @@ class AnalysisLogger:
             output_path: Path to the output file
             output_type: Type of output (e.g., "csv", "png", "report")
             description: Description of the output
+            calculation_details: Explanation of how the output values were calculated
         """
         if self.current_phase is None:
             logger.warning(f"Cannot add output '{output_path}' - no active phase")
@@ -126,7 +133,8 @@ class AnalysisLogger:
         self.current_phase['outputs'].append({
             'path': str(output_path),
             'type': output_type,
-            'description': description
+            'description': description,
+            'calculation_details': calculation_details,
         })
 
     def complete_phase(self, success: bool = True, message: str = ""):
@@ -297,12 +305,16 @@ class AnalysisLogger:
                     path = output['path']
                     output_type = output.get('type', 'file')
                     desc = output.get('description', '')
+                    calculation_details = output.get('calculation_details', '')
 
                     if desc:
                         lines.append(f"  • [{output_type}] {path}")
                         lines.append(f"    {desc}")
                     else:
                         lines.append(f"  • [{output_type}] {path}")
+
+                    if calculation_details:
+                        lines.append(f"    Calculation: {calculation_details}")
 
         lines.append("")
         lines.append("=" * 80)

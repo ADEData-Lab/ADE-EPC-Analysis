@@ -304,8 +304,18 @@ def download_data(scope, analysis_logger: AnalysisLogger = None):
         console.print(f"[green]✓[/green] Data saved to data/raw/")
 
         if analysis_logger:
-            analysis_logger.add_output("data/raw/epc_london_raw.csv", "csv", "Raw EPC data from API")
-            analysis_logger.add_output("data/raw/epc_london_filtered.csv", "csv", "Filtered Edwardian terraced houses")
+            analysis_logger.add_output(
+                "data/raw/epc_london_raw.csv",
+                "csv",
+                "Raw EPC data from API",
+                calculation_details="Direct export of EPC API results for requested boroughs and years before any filtering or validation.",
+            )
+            analysis_logger.add_output(
+                "data/raw/epc_london_filtered.csv",
+                "csv",
+                "Filtered Edwardian terraced houses",
+                calculation_details="Subset of the raw EPC feed filtered with apply_edwardian_filters to keep terraced houses from the target construction era.",
+            )
             analysis_logger.complete_phase(success=True, message=f"Downloaded {len(df_filtered):,} Edwardian properties")
 
         return df_filtered
@@ -374,8 +384,18 @@ def validate_data(df, analysis_logger: AnalysisLogger = None):
     console.print(f"[green]✓[/green] Validated data saved")
 
     if analysis_logger:
-        analysis_logger.add_output(str(output_file), "csv", "Validated EPC dataset")
-        analysis_logger.add_output("data/processed/validation_report.txt", "report", "Data validation report")
+        analysis_logger.add_output(
+            str(output_file),
+            "csv",
+            "Validated EPC dataset",
+            calculation_details="Rows that passed EPCDataValidator quality checks (duplicates removed, mandatory fields present, and schema-normalized values).",
+        )
+        analysis_logger.add_output(
+            "data/processed/validation_report.txt",
+            "report",
+            "Data validation report",
+            calculation_details="Narrative summary from EPCDataValidator detailing record counts, duplicate removals, invalid entries, and column-level issues detected during cleaning.",
+        )
         analysis_logger.complete_phase(success=True, message=f"{len(df_validated):,} records validated")
 
     return df_validated, report
@@ -466,7 +486,12 @@ def analyze_archetype(df, analysis_logger: AnalysisLogger = None):
         console.print("[yellow]Note: EPC band distribution analysis could not be completed (missing required columns)[/yellow]")
 
     if analysis_logger:
-        analysis_logger.add_output("data/outputs/archetype_analysis_results.txt", "report", "Archetype characterization results")
+        analysis_logger.add_output(
+            "data/outputs/archetype_analysis_results.txt",
+            "report",
+            "Archetype characterization results",
+            calculation_details="Aggregations from ArchetypeAnalyzer.analyze_archetype summarizing EPC bands, insulation types, glazing, and heating systems across the validated dataset.",
+        )
         analysis_logger.complete_phase(success=True, message="Archetype characterization complete")
 
     return results
@@ -515,7 +540,12 @@ def model_scenarios(df, analysis_logger: AnalysisLogger = None):
 
     if analysis_logger:
         analysis_logger.add_metric("scenarios_modeled", len(scenario_results), "Decarbonization scenarios analyzed")
-        analysis_logger.add_output("data/outputs/scenario_modeling_results.txt", "report", "Scenario modeling results")
+        analysis_logger.add_output(
+            "data/outputs/scenario_modeling_results.txt",
+            "report",
+            "Scenario modeling results",
+            calculation_details="Outputs from ScenarioModeler.model_all_scenarios combining capital cost, CO₂, bill savings, and payback calculations for each decarbonization pathway.",
+        )
         analysis_logger.complete_phase(success=True, message=f"{len(scenario_results)} scenarios modeled successfully")
 
     return scenario_results, subsidy_results
@@ -590,9 +620,24 @@ def analyze_retrofit_readiness(df, analysis_logger: AnalysisLogger = None):
         console.print(f"[green]✓[/green] Visualizations saved to data/outputs/figures/")
 
         if analysis_logger:
-            analysis_logger.add_output("data/outputs/retrofit_readiness_analysis.csv", "csv", "Property-level retrofit readiness")
-            analysis_logger.add_output("data/outputs/reports/retrofit_readiness_summary.txt", "report", "Retrofit readiness summary")
-            analysis_logger.add_output("data/outputs/figures/retrofit_readiness_dashboard.png", "png", "Retrofit readiness visualization")
+            analysis_logger.add_output(
+                "data/outputs/retrofit_readiness_analysis.csv",
+                "csv",
+                "Property-level retrofit readiness",
+                calculation_details="Tier assignments and prerequisite flags from RetrofitReadinessAnalyzer.assess_heat_pump_readiness, including cost and demand adjustments per property.",
+            )
+            analysis_logger.add_output(
+                "data/outputs/reports/retrofit_readiness_summary.txt",
+                "report",
+                "Retrofit readiness summary",
+                calculation_details="Aggregated counts, percentages, and cost rollups derived from the readiness tiers and barrier indicators computed in the analysis CSV.",
+            )
+            analysis_logger.add_output(
+                "data/outputs/figures/retrofit_readiness_dashboard.png",
+                "png",
+                "Retrofit readiness visualization",
+                calculation_details="Dashboard-style figure generated by ReportGenerator using the tier distribution, fabric costs, and demand metrics from the readiness assessment.",
+            )
             analysis_logger.complete_phase(success=True, message="Retrofit readiness assessment complete")
 
         return df_readiness, summary
@@ -664,14 +709,39 @@ def run_spatial_analysis(df, analysis_logger: AnalysisLogger = None):
                 map_pdf = map_html.with_suffix('.pdf')
 
                 analysis_logger.add_metric("properties_geocoded", len(properties_classified), "Properties with spatial classification")
-                analysis_logger.add_output("data/processed/epc_with_heat_network_tiers.geojson", "geojson", "Geocoded properties with heat network tiers")
-                analysis_logger.add_output("data/outputs/pathway_suitability_by_tier.csv", "csv", "Pathway suitability by tier")
-                analysis_logger.add_output("data/outputs/maps/heat_network_tiers.html", "html", "Interactive heat network tier map")
+                analysis_logger.add_output(
+                    "data/processed/epc_with_heat_network_tiers.geojson",
+                    "geojson",
+                    "Geocoded properties with heat network tiers",
+                    calculation_details="Property points geocoded and intersected with heat density layers in HeatNetworkAnalyzer to assign one of five tier labels.",
+                )
+                analysis_logger.add_output(
+                    "data/outputs/pathway_suitability_by_tier.csv",
+                    "csv",
+                    "Pathway suitability by tier",
+                    calculation_details="Tier-level aggregation summarizing property counts, percentage share, and recommended pathways produced from the spatial classification results.",
+                )
+                analysis_logger.add_output(
+                    "data/outputs/maps/heat_network_tiers.html",
+                    "html",
+                    "Interactive heat network tier map",
+                    calculation_details="Folium web map plotting geocoded properties by tier alongside heat network proximity layers generated within HeatNetworkAnalyzer.",
+                )
 
                 if map_png.exists():
-                    analysis_logger.add_output(str(map_png), "png", "Heat network tier map (image)")
+                    analysis_logger.add_output(
+                        str(map_png),
+                        "png",
+                        "Heat network tier map (image)",
+                        calculation_details="Static rendering of the interactive heat network tier map exported to PNG for offline viewing.",
+                    )
                 if map_pdf.exists():
-                    analysis_logger.add_output(str(map_pdf), "pdf", "Heat network tier map (PDF)")
+                    analysis_logger.add_output(
+                        str(map_pdf),
+                        "pdf",
+                        "Heat network tier map (PDF)",
+                        calculation_details="PDF snapshot of the interactive heat network tier visualization for document-ready sharing.",
+                    )
                 analysis_logger.complete_phase(success=True, message="Spatial analysis with heat network classification complete")
 
             return properties_classified, pathway_summary
@@ -823,10 +893,30 @@ def generate_reports(archetype_results, scenario_results, subsidy_results=None, 
         for report in reports_created:
             # Extract file types from report descriptions
             if "chart" in report.lower() or "histogram" in report.lower():
-                analysis_logger.add_output("data/outputs/figures/", "png", report.replace("✓ ", ""))
-        analysis_logger.add_output("data/outputs/heat_street_analysis_results.xlsx", "xlsx", "Comprehensive Excel workbook")
-        analysis_logger.add_output("data/outputs/reports/executive_summary.txt", "report", "Executive summary (text)")
-        analysis_logger.add_output("data/outputs/reports/executive_summary.md", "report", "Executive summary (Markdown)")
+                analysis_logger.add_output(
+                    "data/outputs/figures/",
+                    "png",
+                    report.replace("✓ ", ""),
+                    calculation_details="PNG figures produced by ReportGenerator using the aggregated metrics referenced in each chart description.",
+                )
+        analysis_logger.add_output(
+            "data/outputs/heat_street_analysis_results.xlsx",
+            "xlsx",
+            "Comprehensive Excel workbook",
+            calculation_details="Workbook exported by ReportGenerator.export_to_excel collating archetype, scenario, subsidy, and property-level results into tabbed sheets.",
+        )
+        analysis_logger.add_output(
+            "data/outputs/reports/executive_summary.txt",
+            "report",
+            "Executive summary (text)",
+            calculation_details="Narrative summary generated from archetype, scenario, and tier results; includes key statistics and recommendations with values pulled directly from prior analysis outputs.",
+        )
+        analysis_logger.add_output(
+            "data/outputs/reports/executive_summary.md",
+            "report",
+            "Executive summary (Markdown)",
+            calculation_details="Markdown rendering of the executive summary using the same calculated metrics as the text report for downstream publishing.",
+        )
         analysis_logger.complete_phase(success=True, message=f"{len(reports_created)} reports and visualizations generated")
 
     return True
@@ -940,9 +1030,24 @@ def generate_additional_reports(df_raw, df_validated, validation_report, archety
 
     if analysis_logger:
         analysis_logger.add_metric("additional_reports", len(reports_created), f"{len(reports_created)} specialized reports")
-        analysis_logger.add_output("data/outputs/borough_breakdown.csv", "csv", "Borough-level breakdown")
-        analysis_logger.add_output("data/outputs/subsidy_sensitivity_analysis.csv", "csv", "Subsidy sensitivity analysis")
-        analysis_logger.add_output("data/outputs/data_quality_report.txt", "report", "Data quality assessment")
+        analysis_logger.add_output(
+            "data/outputs/borough_breakdown.csv",
+            "csv",
+            "Borough-level breakdown",
+            calculation_details="Property and metric aggregates grouped by borough generated in AdditionalReports.generate_borough_breakdown using the validated dataset.",
+        )
+        analysis_logger.add_output(
+            "data/outputs/subsidy_sensitivity_analysis.csv",
+            "csv",
+            "Subsidy sensitivity analysis",
+            calculation_details="Scenario results re-run across specified subsidy levels to recompute bill savings and payback, produced by AdditionalReports.subsidy_sensitivity_analysis.",
+        )
+        analysis_logger.add_output(
+            "data/outputs/data_quality_report.txt",
+            "report",
+            "Data quality assessment",
+            calculation_details="Textual QA narrative comparing raw vs validated counts, highlighting anomalies and validation outcomes from AdditionalReports.generate_data_quality_report.",
+        )
         analysis_logger.complete_phase(success=True, message=f"{len(reports_created)} additional specialized reports generated")
 
     return {
@@ -1068,6 +1173,7 @@ def package_dashboard_assets(
                 str(dataset_path),
                 "json",
                 "Dashboard dataset for React UI",
+                calculation_details="Comprehensive JSON built by DashboardDataBuilder from archetype, scenario, readiness, spatial tiering, subsidy, and load profile results; values are converted to dashboard-ready arrays.",
             )
             analysis_logger.add_metric("dashboard_data_arrays", len(data_arrays), "Data arrays in dashboard JSON")
             analysis_logger.complete_phase(success=True, message="Dashboard data exported")
@@ -1160,7 +1266,12 @@ def load_existing_data(file_path, analysis_logger: AnalysisLogger = None):
 
     if analysis_logger:
         analysis_logger.add_metric("records_loaded", len(df), "Records loaded from existing file")
-        analysis_logger.add_output(str(file_path), "csv", "Existing EPC data loaded")
+        analysis_logger.add_output(
+            str(file_path),
+            "csv",
+            "Existing EPC data loaded",
+            calculation_details="Previously downloaded EPC dataset loaded directly from disk without re-running API extraction; values remain as originally saved.",
+        )
         analysis_logger.complete_phase(success=True, message=f"Loaded {len(df):,} existing records")
 
     return df
