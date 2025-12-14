@@ -5,6 +5,9 @@
 **Project:** Heat Street EPC London Analysis v1.0.0
 **Auditor:** Claude Code Systematic Analysis
 
+> **Legacy scope:** References to archetype, scenario, and pathway modules relate to the retired Heat Street pipeline. The
+> associated code now lives under `legacy/heat_street/` and is excluded from the ADE national workflow.
+
 ---
 
 > **IMPORTANT: Authoritative Sources Now Available**

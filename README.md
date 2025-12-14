@@ -25,10 +25,10 @@ ADE-EPC-Analysis/
 │   ├── acquisition/       # Bulk downloaders, geocoding utilities
 │   ├── analysis/          # Policy metric analyzers
 │   ├── cleaning/          # Quality assurance and validation
-│   ├── modeling/          # Scenario and pathway modelling
 │   ├── reporting/         # Reporting helpers
 │   ├── spatial/           # Spatial enrichment and proximity analysis
 │   └── utils/             # Shared utilities (geography lookup, helpers)
+├── legacy/                # Archived London-centric pipeline components (not used by ADE)
 ├── run_ade_analysis.py    # Primary CLI pipeline (recommended entrypoint)
 ├── main.py                # Compatibility shim that delegates to run_ade_analysis
 └── requirements*.txt      # Dependency pins
@@ -47,7 +47,7 @@ run-conda.bat
 # Windows PowerShell
 ./run-conda.ps1
 ```
-This creates a Python 3.11 environment, installs geopandas/GDAL, installs other dependencies, and launches the interactive pipeline.
+This creates a Python 3.11 environment, installs geopandas/GDAL, installs other dependencies, and runs the national ADE pipeline.
 
 ### Standard launcher (core analysis only)
 ```bash

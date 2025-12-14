@@ -1,5 +1,8 @@
 # Windows Installation Guide
 
+> **Note:** References to scenario/pathway modeling reflect the retired Heat Street workflow. The national ADE pipeline
+> runs via `python run_ade_analysis.py`; legacy components are archived under `legacy/heat_street/`.
+
 ## Quick Setup (No Spatial Features)
 
 Most users don't need the spatial analysis features. Here's the quick setup:

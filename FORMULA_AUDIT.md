@@ -5,6 +5,9 @@
 **Status:** ✅ VERIFIED - 66% of values confirmed accurate, corrections implemented
 **Purpose:** Full transparency on all calculations, assumptions, constants, and formulas used in the analysis
 
+> **Legacy scope:** Sections referencing archetype/scenario modeling relate to the retired Heat Street workflow.
+> The underlying code now lives in `legacy/heat_street/` and is not part of the ADE national pipeline.
+
 ---
 
 ## ⚠️ VERIFICATION AND CORRECTIONS NOTICE

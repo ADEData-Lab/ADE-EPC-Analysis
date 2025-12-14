@@ -2,6 +2,9 @@
 
 The spatial analysis features require **GDAL** (Geospatial Data Abstraction Library) and **geopandas**, which can be challenging to install on Windows. This guide provides multiple methods from easiest to most comprehensive.
 
+> **Note:** Scenario/pathway modeling references in this guide relate to the legacy Heat Street workflow. The ADE national
+> pipeline runs end-to-end via `python run_ade_analysis.py`, with legacy components archived under `legacy/heat_street/`.
+
 ## ⚠️ Important Note
 
 **The core analysis works perfectly WITHOUT spatial dependencies!**
