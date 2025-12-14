@@ -1,134 +1,55 @@
-# ADE EPC Analysis - England and Wales
+# ADE EPC Analysis (England & Wales)
 
-National-scale Energy Performance Certificate (EPC) analysis for domestic properties across England and Wales, focusing on ADE's heat decarbonisation policy objectives.
+National-scale Energy Performance Certificate (EPC) analysis for domestic properties across England and Wales, aligned to the Association for Decentralised Energy's heat decarbonisation policy objectives.
 
-## Project Overview
+## What this project delivers
+- **Heating fuel mix**: Current fuel sources, electrification rate, and off-gas prevalence.
+- **Heat pump potential**: Suitability assessment and barrier categorisation using EPC attributes.
+- **Heat network potential**: Heat-density tiers, priority area identification, and investment signals.
+- **Demand reduction**: Fabric improvement needs, savings potential, and path-to-EPC-C costs.
+- **Constituency-ready outputs**: Automated breakdowns for parliamentary constituencies and other geographies.
 
-This project analyzes all domestic EPC certificates across England and Wales (~20M+ properties) to inform ADE policy priorities:
+## Current status (January 2025)
+- ✅ National pipeline implemented and wired to the new analyzers.
+- ✅ Heat network potential, demand reduction, and geographic enrichment workflows completed.
+- ✅ Simplified validator supports chunked processing for 20M+ records.
+- ✅ Documentation rewritten for national deployment.
 
-- **Heating Fuel Mix** - Current fuel sources, off-gas properties, electrification rate
-- **Heat Pump Potential** - Suitability assessment, barrier analysis, deployment readiness
-- **Heat Network Potential** - Heat density analysis, priority areas for networks
-- **Demand Reduction** - Fabric improvement potential, energy savings opportunities
-
-Analysis is provided at multiple geographic levels: National → Regional → Local Authority → Parliamentary Constituency
-
-## Transformation Status (December 2024)
-
-This repository has been transformed from **Heat Street EPC** (London Edwardian terraced houses) to **ADE EPC Analysis** (England & Wales all domestic properties).
-
-### ✅ Completed
-- Dashboard removed
-- Configuration updated for national scope
-- **New modules created:**
-  - `src/acquisition/epc_bulk_downloader.py` - DESNZ bulk file downloader
-  - `src/utils/geography_lookup.py` - Geographic hierarchies (national/regional/LA/constituency)
-  - `src/analysis/heating_fuel_analysis.py` - Fuel mix and electrification analysis
-  - `src/analysis/heat_pump_potential.py` - Heat pump suitability assessment
-
-### 🚧 In Progress
-- Heat network potential module
-- Demand reduction analysis module
-- Simplified data validator (remove Edwardian-specific filters)
-- Updated main pipeline
-- Geographic enrichment workflow
-
-### 📋 To Do
-- Update visualizations for national scale
-- Update documentation
-- Test with sample data
-- Performance optimization for large dataset (20M+ properties)
-
-## Key Features
-
-✅ **Bulk Data Processing**: DESNZ bulk file downloader for full England & Wales dataset
-✅ **Geographic Hierarchies**: Analysis at national, regional, local authority, and constituency levels
-✅ **Policy-Focused Metrics**: Four core ADE policy objectives (fuel mix, heat pumps, heat networks, demand reduction)
-✅ **Quality Assurance**: Implements Hardy & Glew validation protocols
-✅ **Scalable Architecture**: Chunked processing for 20M+ properties
-✅ **Flexible Configuration**: Easy to filter by region, local authority, or other criteria
-
-## Project Structure
-
+## Repository layout
 ```
 ADE-EPC-Analysis/
-├── config/
-├── data/
-│   ├── external/
-│   ├── outputs/
-│   ├── processed/
-│   └── supplementary/
-├── docs/
-├── old dashboard/
-├── src/
-│   ├── acquisition/
-│   ├── analysis/
-│   ├── cleaning/
-│   ├── modeling/
-│   ├── reporting/
-│   ├── spatial/
-│   └── utils/
-├── tests/
-├── main.py
-├── run_ade_analysis.py
-├── run_analysis.py
-├── generate_dashboard_data.py
-├── validate_outputs.py
-├── requirements.txt
-└── requirements-spatial.txt
+├── config/                # YAML configuration and directory helpers
+├── data/                  # Raw, processed, supplementary, and output data
+├── docs/                  # Supporting documentation
+├── src/                   # All application modules
+│   ├── acquisition/       # Bulk downloaders, geocoding utilities
+│   ├── analysis/          # Policy metric analyzers
+│   ├── cleaning/          # Quality assurance and validation
+│   ├── modeling/          # Scenario and pathway modelling
+│   ├── reporting/         # Reporting helpers
+│   ├── spatial/           # Spatial enrichment and proximity analysis
+│   └── utils/             # Shared utilities (geography lookup, helpers)
+├── run_ade_analysis.py    # Primary CLI pipeline (recommended entrypoint)
+├── main.py                # Compatibility shim that delegates to run_ade_analysis
+└── requirements*.txt      # Dependency pins
 ```
 
-## Installation
-
-### Prerequisites
-
-**Core Requirements**:
-- Python 3.11 or higher
-- pip package manager
-
-**For Spatial Analysis (Heat Network Tiers)**:
-- **Option A (Recommended)**: Miniconda/Anaconda - handles GDAL automatically
-- **Option B**: Manual GDAL installation (complex on Windows)
-- **Option C**: Skip spatial analysis - 85% of functionality still works!
-
-### 🚀 Quick Start (Recommended Methods)
-
-#### Method 1: Conda Launcher (Best for Windows + Spatial Analysis)
-
-**Recommended if you want heat network tier analysis on Windows!**
-
-This method automatically installs GDAL/geopandas via Conda, avoiding Windows installation issues.
-
-**Step 1**: Install Miniconda (if not already installed)
-- Download: https://docs.conda.io/en/latest/miniconda.html
-- Run installer with default settings
-- Restart your terminal
-
-**Step 2**: Clone and run
+## Quick start
+### Recommended: Conda launcher (Windows-friendly, supports spatial analysis)
 ```bash
+# Clone the repo
 git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
 cd ADE-EPC-Analysis
 
 # Windows Command Prompt
 run-conda.bat
 
-# OR Windows PowerShell
-.\run-conda.ps1
+# Windows PowerShell
+./run-conda.ps1
 ```
+This creates a Python 3.11 environment, installs geopandas/GDAL, installs other dependencies, and launches the interactive pipeline.
 
-This single command:
-- Creates conda environment with Python 3.11
-- Installs geopandas + GDAL automatically
-- Installs all other dependencies
-- Runs the interactive analysis
-- **Everything works, including spatial analysis!**
-
-#### Method 2: Standard Launcher (Core Analysis Only)
-
-**Use this if you don't need spatial analysis or have GDAL issues.**
-
-Works perfectly for EPC analysis, scenarios, charts, and reports (85% of functionality).
-
+### Standard launcher (core analysis only)
 ```bash
 git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
 cd ADE-EPC-Analysis
@@ -136,452 +57,48 @@ cd ADE-EPC-Analysis
 # Windows Command Prompt
 run.bat
 
-# OR Windows PowerShell
-.\run.ps1
+# Windows PowerShell
+./run.ps1
 
-# OR Linux/Mac
-python run_analysis.py
+# Linux/Mac
+python run_ade_analysis.py
 ```
+The standard path installs core dependencies and runs the national pipeline. Spatial features are optional; the pipeline will skip heat-network proximity if geopandas/GDAL are unavailable.
 
-This automatically:
-- Creates virtual environment
-- Installs all core dependencies
-- Optionally attempts spatial dependencies (may fail on Windows)
-- Runs the interactive analysis
-
-**The analysis works even if spatial dependencies fail!**
-
-#### Method 3: Manual Setup (Advanced Users)
-
-See [Manual Setup](#manual-setup-all-platforms) section below.
-
-### Manual Setup (All Platforms)
-
-<details>
-<summary>Click to expand manual setup instructions</summary>
-
-#### Step 1: Clone the repository
-
-**Windows (PowerShell)**:
-```powershell
-git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
-cd ADE-EPC-Analysis
-```
-
-**Linux/Mac**:
+### Manual setup
+If you prefer to manage environments yourself, use Python 3.11+, create a virtual environment, and install either `requirements.txt` (core) or `requirements-spatial.txt` (adds geopandas/GDAL). Then run:
 ```bash
-git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
-cd ADE-EPC-Analysis
+python run_ade_analysis.py
 ```
 
-#### Step 2: Create virtual environment
-
-**All platforms**:
-```bash
-python -m venv venv
-```
-
-#### Step 3: Activate virtual environment
-
-**Windows PowerShell**:
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-**Windows Command Prompt**:
-```cmd
-venv\Scripts\activate.bat
-```
-
-**Linux/Mac**:
-```bash
-source venv/bin/activate
-```
-
-#### Step 4: Install dependencies
-
-**All platforms**:
-```bash
-pip install -r requirements.txt
-```
-
-#### Step 5: Verify installation
-
-**All platforms**:
-```bash
-python -c "from config.config import load_config; print('✓ Installation successful!')"
-```
-
-</details>
-
-### Troubleshooting
-
-#### Common Issues
-
-**Windows: "cannot be loaded because running scripts is disabled"**
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-**Any platform: "python is not recognized"**
-- Ensure Python is in your PATH
-- Try using `python3` instead of `python`
-- Reinstall Python and check "Add to PATH" during installation
-
-**Conda: "conda is not recognized"**
-- Install Miniconda: https://docs.conda.io/en/latest/miniconda.html
-- Restart your terminal after installation
-- Use `run-conda.bat` or `run-conda.ps1` (not `run.bat`)
-
-**GDAL/Geopandas installation fails with run.bat**
-- This is normal on Windows!
-- The core analysis still works (85% of functionality)
-- For spatial analysis, use `run-conda.bat` instead
-- See [docs/SPATIAL_SETUP.md](docs/SPATIAL_SETUP.md) for detailed guide
-
-**"No module named 'osgeo'" during spatial analysis**
-- GDAL not installed
-- Use `run-conda.bat` for automatic installation
-- Or skip spatial analysis (analysis works without it)
-
-#### Which Run Script Should I Use?
-
-| Script | Best For | Spatial Analysis? |
-|--------|----------|-------------------|
-| `run-conda.bat/ps1` | **Windows users wanting heat network tiers** | ✅ Yes (auto-installs GDAL) |
-| `run.bat/ps1` | Quick start, core analysis only | ⚠️ Attempts install (may fail) |
-| `setup.bat/ps1` | First-time setup only | ❌ No (run separately) |
-
-**Recommendation**: Use `run-conda.bat` if you want the complete analysis with spatial features on Windows!
-
-## Data Acquisition
-
-### EPC Register Data
-
-EPC data must be obtained from the UK Government's EPC Register:
-
-1. **Register** at [https://epc.opendatacommunities.org/](https://epc.opendatacommunities.org/)
-2. **Download** bulk data for London boroughs (see `data/raw/DOWNLOAD_INSTRUCTIONS.txt`)
-3. **Place** CSV files in `data/raw/` directory with naming pattern `epc_*.csv`
-
-Alternatively, run:
-```bash
-python main.py --phase acquire --download
-```
-This creates detailed download instructions.
-
-### Supplementary Data
-
-**London Heat Map** (optional but recommended):
-- Heat network locations: Download from [London Datastore](https://data.london.gov.uk/)
-- Heat Network Zones: [GLA Heat Network Zones](https://www.london.gov.uk/programmes-strategies/environment-and-climate-change/energy/london-heat-map)
-- Place GeoJSON/Shapefile in `data/supplementary/`
-
-**Boundary Files**:
-- London borough boundaries
-- LSOA boundaries for aggregation
-
-## Usage
-
-### 🎯 Interactive Analysis (Recommended)
-
-The easiest way to run the complete analysis is using the interactive CLI:
-
-```bash
-# If using Conda method
-run-conda.bat   # or run-conda.ps1 for PowerShell
-
-# If using standard method
-run.bat         # or run.ps1 for PowerShell
-```
-
-The interactive CLI will guide you through:
-
-1. **EPC Data Download**
-   - Choose borough(s) to analyze
-   - Automatically downloads from EPC API
-   - Validates and cleans data
-
-2. **Archetype Characterization**
-   - Analyzes building fabric (walls, loft, floors, windows)
-   - Summarizes heating systems and fuel types
-   - Reports EPC band distribution
-   - Calculates energy consumption and CO₂ emissions
-
-3. **Scenario Modeling**
-   - Models 5 decarbonization pathways
-   - Calculates costs, savings, payback periods
-   - Estimates EPC band improvements
-   - Performs subsidy sensitivity analysis
-
-4. **Spatial Analysis** (if GDAL available)
-   - Auto-downloads London GIS data
-   - Classifies properties into heat network tiers
-   - Calculates heat density (GWh/km²)
-   - Generates interactive HTML maps
-   - Exports GeoJSON with tier classifications
-
-5. **Visualization & Reports**
-   - Creates charts (EPC bands, scenarios, subsidies)
-   - Generates formatted Excel workbook
-   - Produces executive summary report
-   - Saves all outputs to `data/outputs/`
-
-### 📊 Output Locations
-
-After running the analysis, find your results in:
-
-```
-data/outputs/
-├── figures/
-│   ├── epc_band_distribution.png
-│   ├── scenario_comparison.png
-│   ├── subsidy_sensitivity.png
-│   └── heat_network_tiers.png
-├── reports/
-│   └── executive_summary.txt
-├── maps/
-│   └── heat_network_tiers.html  (interactive map)
-├── analysis_results.xlsx         (comprehensive workbook)
-└── properties_with_tiers.geojson (spatial data)
-```
-
-### 🔧 Advanced: Command-Line Interface
-
-For automated workflows or specific phases:
-
-```bash
-# Activate environment first
-conda activate heatstreet  # if using Conda
-# OR
-.\venv\Scripts\activate    # if using venv
-
-# Run specific phases
-python run_analysis.py
-```
-
-### 🛠️ Advanced: Running Individual Modules
-
-Each module can be run independently for testing:
-
-```bash
-# Data acquisition
-python src/acquisition/epc_downloader.py
-
-# Data validation
-python src/cleaning/data_validator.py
-
-# Archetype analysis
-python src/analysis/archetype_analysis.py
-
-# Scenario modeling
-python src/modeling/scenario_model.py
-
-# Spatial analysis (requires GDAL)
-python src/spatial/heat_network_analysis.py
-```
-
-## Configuration
-
-Edit `config/config.yaml` to customize:
-
-- **Geographic scope**: London boroughs to include
-- **Property filters**: Construction period, property types
-- **Quality thresholds**: Floor area ranges, required fields
-- **Scenario definitions**: Measures for each pathway
-- **Cost assumptions**: Installation costs, energy prices
-- **Subsidy levels**: For sensitivity analysis
-
-Example:
-```yaml
-property_filters:
-  construction_period:
-    end_year: 1930
-  property_types:
-    - "Mid-terrace"
-    - "End-terrace"
-
-scenarios:
-  heat_pump:
-    name: "Heat pump pathway"
-    measures:
-      - "loft_insulation_topup"
-      - "wall_insulation"
-      - "ashp_installation"
-```
-
-## Key Outputs
-
-### Data Files
-
-- `data/processed/epc_london_validated.csv` - Cleaned EPC dataset
-- `data/processed/epc_london_with_tiers.geojson` - Properties with heat network tier classification
-- `data/outputs/pathway_suitability_by_tier.csv` - Recommended pathways by tier
-
-### Analysis Reports
-
-- `data/outputs/archetype_analysis_results.txt` - Property characteristics summary
-- `data/outputs/scenario_modeling_results.txt` - Scenario cost-benefit analysis
-- `data/outputs/validation_report.txt` - Data quality report
-- `data/outputs/reports/executive_summary.txt` - Executive summary
-
-### Visualizations
-
-- `data/outputs/figures/epc_band_distribution.png` - Current EPC ratings
-- `data/outputs/figures/sap_score_distribution.png` - SAP score histogram
-- `data/outputs/figures/scenario_comparison.png` - Scenario comparison charts
-- `data/outputs/figures/subsidy_sensitivity.png` - Subsidy impact analysis
-- `data/outputs/figures/heat_network_tiers.png` - Tier distribution
-- `data/outputs/maps/heat_network_tiers.html` - Interactive map
-
-## Decarbonization Scenarios
-
-The project models five scenarios:
-
-| Scenario | Measures | Typical Cost | CO₂ Savings |
-|----------|----------|--------------|-------------|
-| **Baseline** | No intervention | £0 | 0% |
-| **Fabric Only** | Loft, wall, glazing | £8,000-15,000 | 30-40% |
-| **Heat Pump** | Fabric + ASHP + emitters | £20,000-30,000 | 60-80% |
-| **Heat Network** | Modest fabric + DH connection | £7,000-12,000 | 50-70% |
-| **Hybrid** | Heat network where viable, ASHP elsewhere | Varies | 60-75% |
-
-## Heat Network Tier Classification
-
-Properties are classified into five tiers:
-
-| Tier | Definition | Recommended Pathway |
-|------|------------|---------------------|
-| **Tier 1** | Within 250m of existing heat network | District heating connection |
-| **Tier 2** | Within designated Heat Network Zone | District heating (planned) |
-| **Tier 3** | High heat density (>3,000 kWh/m/year) | District heating (extension viable) |
-| **Tier 4** | Moderate heat density (1,500-3,000) | Heat pump (network marginal) |
-| **Tier 5** | Low heat density (<1,500) | Heat pump (network not viable) |
-
-## Analysis Methodology
-
-### Data Quality Validation
-
-Based on Hardy & Glew (2019) findings:
-- Duplicate removal (by UPRN/address, keep most recent)
-- Floor area validation (25-400 m²)
-- Built form consistency checks
-- Construction date verification
-- Insulation logic validation (e.g., no cavity fill in solid walls)
-
-### Archetype Characterization
-
-Summary statistics for:
-- EPC band distribution
-- SAP score (mean, median, percentiles)
-- Wall construction and insulation status
-- Loft insulation thickness categories
-- Floor insulation presence
-- Window glazing types
-- Heating systems and fuel types
-- Current energy consumption (kWh/m²/year)
-- CO₂ emissions (kg/m²/year)
-
-### Scenario Modeling
-
-For each property:
-1. Calculate intervention costs based on property characteristics
-2. Estimate energy savings (using simplified RdSAP methodology)
-3. Calculate CO₂ reductions
-4. Compute bill savings (current and projected energy prices)
-5. Determine payback period
-6. Estimate new EPC band
-
-Aggregate to stock level:
-- Total capital costs
-- Annual energy/CO₂ savings
-- Payback distribution
-- EPC band shift analysis
-
-### Subsidy Sensitivity
-
-Model subsidy levels: 0%, 25%, 50%, 75%, 100%
-
-For each level:
-- Adjusted payback period
-- Estimated uptake rate (based on payback thresholds)
-- Public expenditure required
-- Carbon abatement cost (£/tCO₂)
-
-## Deliverables Mapping
-
-This project delivers all contract requirements:
-
-| Contract Element | Output Location |
-|------------------|-----------------|
-| Insulation levels analysis | `archetype_analysis_results.txt` |
-| Heating systems analysis | `archetype_analysis_results.txt` |
-| Energy consumption estimates | `archetype_analysis_results.txt` |
-| EPC ratings and scores | `archetype_analysis_results.txt` |
-| Carbon impact | `archetype_analysis_results.txt` |
-| Energy efficiency options | `scenario_modeling_results.txt` |
-| Costed decarbonization pathways | `scenario_modeling_results.txt` |
-| District heating analysis | `pathway_suitability_by_tier.csv` |
-| Heat pump pathway analysis | `scenario_modeling_results.txt` |
-| Subsidy impact analysis | `subsidy_sensitivity.png` |
-| Policy implications | `executive_summary.txt` |
-
-## Timeline & Milestones
-
-- **Phase 1 (Data Acquisition)**: Complete by 3 Dec
-- **Phase 2 (Data Cleaning)**: Complete by 5 Dec
-- **Phase 3 (Archetype Analysis)**: Complete by 7 Dec
-- **Phase 4 (Spatial Overlay)**: Complete by 8 Dec
-- **Phase 5 (Scenario Modeling)**: Complete by 11 Dec
-- **Phase 6 (Subsidy Analysis)**: Complete by 13 Dec
-- **Phase 7 (Final Reporting)**: Complete by 15 Dec
-
-## Testing
-
-Run unit tests:
-```bash
-pytest tests/
-```
-
-Run with coverage:
-```bash
-pytest --cov=src tests/
-```
+## Pipeline overview
+`run_ade_analysis.py` orchestrates end-to-end processing with five phases:
+1. **Data acquisition** – Downloads and combines DESNZ EPC bulk data (England); Wales is supported via manual download instructions.
+2. **Data validation** – Chunked quality assurance using `EPCDataValidator`, producing `epc_england_wales_validated.parquet`.
+3. **Geographic enrichment** – Adds national/regional/local-authority/constituency labels via `GeographyLookup`; optional heat-network proximity sampling is available when spatial dependencies are installed.
+4. **Policy analysis** – Runs heating fuel, heat pump, heat network, demand reduction, consumer impact, and policy scenario analyzers; constituency-level rollups are generated automatically.
+5. **Reporting** – Summarises results to `data/outputs/reports` and writes CSV outputs for downstream dashboards.
+
+You can rerun individual phases by commenting within `main()` or by calling the helper functions directly (see `phase_*` functions in `run_ade_analysis.py`).
+
+## Key outputs
+- `data/outputs/heat_network_potential_results.txt` – Priority tiers and viable connection estimates.
+- `data/outputs/demand_reduction_results.txt` – Fabric needs, savings potential, and EPC-C pathway metrics.
+- `data/outputs/constituency_*.csv` – Constituency-level slices for policy engagement.
+- `data/outputs/reports/` – Combined narrative summary generated in the reporting phase.
+
+## Data requirements
+- DESNZ EPC bulk datasets for England (downloaded automatically) and Wales (manual download per `MANUAL_DOWNLOAD_GUIDE.md`).
+- Optional postcode lookups for constituency joins (expected under `data/supplementary/`).
+- Sufficient disk space: ~20GB for uncompressed parquet and outputs.
+
+## Support and troubleshooting
+- For GDAL/geopandas installation issues on Windows, prefer the Conda launcher.
+- If validation fails, delete corrupted parquet files under `data/processed/` and rerun.
+- The compatibility entrypoint `python main.py` simply delegates to `run_ade_analysis.py`.
 
 ## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-analysis`)
-3. Commit changes (`git commit -am 'Add new analysis module'`)
-4. Push to branch (`git push origin feature/new-analysis`)
-5. Create Pull Request
-
-## References
-
-- Hardy, A., & Glew, D. (2019). An analysis of errors in the Energy Performance certificate database. *Energy Policy*, 129, 1168-1178.
-- UK EPC Register: https://epc.opendatacommunities.org/
-- London Heat Map: https://www.london.gov.uk/programmes-strategies/environment-and-climate-change/energy/london-heat-map
-- RdSAP Methodology: https://www.bre.co.uk/sap/
-
-## License
-
-This project is licensed under the MIT License - see LICENSE file for details.
-
-## Contact
-
-For questions or issues:
-- Open an issue on GitHub
-- Contact: [project lead email]
-
-## Acknowledgments
-
-- UK Government EPC Register for open data access
-- Greater London Authority for London Heat Map data
-- Hardy & Glew for EPC quality assurance methodology
-- Case street residents (Shakespeare Crescent) for local calibration data
-
----
-
-**Version**: 1.0.0
-**Last Updated**: December 2025
-**Status**: Active Development
+1. Fork and create a feature branch.
+2. Add or update authoritative source references when changing configuration values.
+3. Run the relevant pipeline phases locally before opening a PR.
+4. Keep documentation aligned with the national pipeline defaults.
