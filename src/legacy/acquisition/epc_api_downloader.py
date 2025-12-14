@@ -5,18 +5,6 @@ Downloads EPC data directly from the UK EPC Register API.
 Handles data for London boroughs with filters for Edwardian terraced housing.
 """
 
-from textwrap import dedent
-
-raise RuntimeError(
-    dedent(
-        """
-        This EPC API downloader has been archived under src/legacy/acquisition
-        and is no longer maintained. The national workflow does not rely on EPC
-        API credentials; please use the supported bulk data ingestion pipeline.
-        """
-    )
-)
-
 import os
 import base64
 import urllib.request
@@ -34,12 +22,7 @@ import threading
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.config import (
-    load_config,
-    DATA_RAW_DIR,
-    get_london_boroughs,
-    get_property_filters
-)
+from config.config import DATA_RAW_DIR
 
 # Load environment variables
 load_dotenv()
@@ -99,8 +82,10 @@ class EPCAPIDownloader:
             email: API email (from environment if not provided)
             api_key: API key (from environment if not provided)
         """
-        self.config = load_config()
-        self.property_filters = get_property_filters()
+        logger.warning(
+            "[Legacy] EPCAPIDownloader is retained for historical London workflows "
+            "and is not part of the national pipeline."
+        )
 
         # Get credentials from environment or parameters
         self.email = email or os.getenv('EPC_API_EMAIL')

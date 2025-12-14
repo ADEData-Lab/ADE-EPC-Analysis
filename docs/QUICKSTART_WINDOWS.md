@@ -252,12 +252,8 @@ cat filename.txt
 
 ### Running Python Scripts
 
-> Legacy note: the former London-only download utilities now live under
-> `src\legacy\acquisition` for archival reference and are not part of the
-> supported workflow.
-
 ```powershell
-# Run a specific module
+# Run a legacy London downloader (deprecated)
 python src\legacy\acquisition\epc_downloader.py
 
 # Run with arguments

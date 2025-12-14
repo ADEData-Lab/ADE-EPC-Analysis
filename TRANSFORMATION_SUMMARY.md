@@ -109,7 +109,7 @@ Modules moved to archive/:
   - src/modeling/scenario_model.py
   - src/modeling/pathway_model.py
   - src/legacy/acquisition/london_gis_downloader.py
-  - src/spatial/heat_network_analysis.py (legacy stub)
+  - src/spatial/heat_network_analysis.py
   - src/spatial/postcode_geocoder.py
   - src/reporting/dashboard_data_builder.py
 ```

@@ -5,18 +5,6 @@ Downloads and extracts EPC data from the official UK EPC Register.
 Handles data for London boroughs with filters for Edwardian terraced housing.
 """
 
-from textwrap import dedent
-
-raise RuntimeError(
-    dedent(
-        """
-        This London-focused EPC downloader is archived under src/legacy/acquisition
-        and kept for historical reference only. Please use the maintained bulk
-        ingestion workflow for current analyses.
-        """
-    )
-)
-
 import os
 import requests
 import pandas as pd
@@ -30,12 +18,18 @@ from loguru import logger
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
-from config.config import (
-    load_config,
-    DATA_RAW_DIR,
-    get_london_boroughs,
-    get_property_filters
-)
+from config.config import DATA_RAW_DIR
+
+
+LONDON_BOROUGHS = [
+    "Barking and Dagenham", "Barnet", "Bexley", "Brent", "Bromley", "Camden",
+    "City of London", "Croydon", "Ealing", "Enfield", "Greenwich", "Hackney",
+    "Hammersmith and Fulham", "Haringey", "Harrow", "Havering", "Hillingdon",
+    "Hounslow", "Islington", "Kensington and Chelsea", "Kingston upon Thames",
+    "Lambeth", "Lewisham", "Merton", "Newham", "Redbridge", "Richmond upon Thames",
+    "Southwark", "Sutton", "Tower Hamlets", "Waltham Forest", "Wandsworth",
+    "Westminster"
+]
 
 
 class EPCDownloader:
@@ -56,9 +50,13 @@ class EPCDownloader:
             api_key: API key for EPC register (optional, may be required for bulk downloads)
         """
         self.api_key = api_key
-        self.config = load_config()
-        self.boroughs = get_london_boroughs()
-        self.property_filters = get_property_filters()
+        self.boroughs = LONDON_BOROUGHS
+        self.property_filters = {'certificate_recency_years': 10}
+
+        logger.warning(
+            "[Legacy] EPCDownloader is retained for historic London workflows and "
+            "is not part of the national pipeline."
+        )
 
         # Ensure output directory exists
         DATA_RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -208,7 +206,7 @@ class EPCDownloader:
         Returns:
             DataFrame containing only Shakespeare Crescent records
         """
-        case_street = self.config['analysis']['case_street']
+        case_street = "Shakespeare Crescent"
         logger.info(f"Extracting data for case street: {case_street}")
 
         if 'ADDRESS' in df.columns:

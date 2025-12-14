@@ -1,8 +1,6 @@
 # EPC API Usage Guide
 
-This guide explains how to use the (now retired) EPC API downloader to automatically
-fetch data from the UK EPC Register. The downloader has been archived under
-`src/legacy/acquisition` and should only be used for historical reference.
+This guide explains how to use the EPC API downloader to automatically fetch data from the UK EPC Register.
 
 ## Setup
 
@@ -48,10 +46,10 @@ export EPC_API_KEY="your_api_key_here"
 
 ### Quick Start
 
-Download all London EPC data for Edwardian terraced houses (legacy example only):
+Download all London EPC data for Edwardian terraced houses:
 
 ```python
-from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.acquisition.epc_api_downloader import EPCAPIDownloader
 
 # Initialize downloader (reads credentials from .env)
 downloader = EPCAPIDownloader()
@@ -69,10 +67,10 @@ df_filtered = downloader.apply_edwardian_filters(df)
 downloader.save_data(df_filtered, "epc_london_edwardian.csv")
 ```
 
-### Download a Single Borough (legacy)
+### Download a Single Borough
 
 ```python
-from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.acquisition.epc_api_downloader import EPCAPIDownloader
 
 downloader = EPCAPIDownloader()
 
@@ -99,7 +97,7 @@ df = downloader.download_all_london_boroughs(
 
 ### Command Line Usage
 
-Run the downloader directly:
+Run the legacy London-only downloader directly (deprecated):
 
 ```bash
 # Activate virtual environment first
@@ -263,7 +261,7 @@ python main.py --phase analyze
 Or integrate directly:
 
 ```python
-from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.acquisition.epc_api_downloader import EPCAPIDownloader
 
 # Download data via API
 downloader = EPCAPIDownloader()
@@ -291,7 +289,7 @@ If you accidentally commit credentials:
 Complete example downloading and analyzing Camden EPCs:
 
 ```python
-from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.acquisition.epc_api_downloader import EPCAPIDownloader
 import pandas as pd
 
 # Initialize
