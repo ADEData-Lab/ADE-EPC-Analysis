@@ -96,7 +96,7 @@ Write-Host "Starting Interactive Analysis" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-python run_analysis.py
+python run_ade_analysis.py
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""

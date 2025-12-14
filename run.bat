@@ -99,7 +99,7 @@ echo Starting Interactive Analysis
 echo ========================================
 echo.
 
-python run_analysis.py
+python run_ade_analysis.py
 
 if %errorlevel% equ 0 (
     echo.

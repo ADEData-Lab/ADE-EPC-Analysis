@@ -19,7 +19,7 @@ run.bat
 ### Linux/Mac
 
 ```bash
-python run_analysis.py
+python run_ade_analysis.py
 ```
 
 ## What It Does
@@ -250,37 +250,32 @@ Generating reports and visualizations...
 ### Direct Python
 
 ```python
-from run_analysis import main
-
-# Run with all prompts
-main()
-```
-
-### With Custom Config
-
-```python
-from run_analysis import (
-    download_data,
-    validate_data,
-    analyze_archetype,
-    model_scenarios,
-    generate_reports
+import pandas as pd
+from run_ade_analysis import (
+    main,
+    phase_1_data_acquisition,
+    phase_2_data_validation,
+    phase_3_geographic_enrichment,
+    phase_3b_heat_network_proximity,
+    phase_4_policy_analysis,
+    phase_4b_constituency_analysis,
+    phase_5_reporting,
 )
 
-# Define custom scope
-scope = {
-    'mode': 'multiple',
-    'boroughs': ['Camden', 'Islington'],
-    'from_year': 2020,
-    'max_per_borough': 5000
-}
+# Run with interactive prompts
+main()
 
-# Run pipeline
-df = download_data(scope)
-df_validated = validate_data(df)
-archetype_results = analyze_archetype(df_validated)
-scenario_results, subsidy_results = model_scenarios(df_validated)
-generate_reports(archetype_results, scenario_results)
+# Or orchestrate phases manually
+data_path = phase_1_data_acquisition()
+validated_path = phase_2_data_validation(data_path)
+df_validated = pd.read_parquet(validated_path)
+df_enriched = phase_3_geographic_enrichment(df_validated)
+_, proximity_results = phase_3b_heat_network_proximity(df_enriched)
+results = phase_4_policy_analysis(df_enriched)
+if proximity_results:
+    results["heat_network_proximity"] = proximity_results
+phase_4b_constituency_analysis(df_enriched, results)
+phase_5_reporting(results)
 ```
 
 ### Environment Variables
@@ -293,7 +288,7 @@ $env:EPC_API_EMAIL="your.email@example.com"
 $env:EPC_API_KEY="your_api_key"
 
 # Then run
-python run_analysis.py
+python run_ade_analysis.py
 ```
 
 ## Troubleshooting

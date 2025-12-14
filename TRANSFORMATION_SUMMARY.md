@@ -300,7 +300,7 @@ If you were using the Heat Street EPC version:
 1. **Dashboard removed** - use text reports instead
 2. **Data acquisition changed** - now uses bulk files, not API
 3. **Filters removed** - no longer limited to pre-1930s terraced
-4. **New pipeline** - use `run_ade_analysis.py` instead of `run_analysis.py`
+4. **New pipeline** - legacy `run_analysis.py` has been retired; use `run_ade_analysis.py`
 
 ### Preserving Old Functionality
 Complex analysis modules have been **archived**, not deleted:

@@ -2,7 +2,7 @@
 
 ## 📊 What Has Been Created
 
-A comprehensive React dashboard that addresses **all 12 client requirements** from CLIENT_QUESTIONS_VERIFICATION.md. The dashboard now ingests results directly from the latest `run_analysis.py` run via a generated `dashboard-data.json` file.
+A comprehensive React dashboard that addresses **all 12 client requirements** from CLIENT_QUESTIONS_VERIFICATION.md. The dashboard now ingests results directly from the latest `run_ade_analysis.py` run via a generated `dashboard-data.json` file.
 
 ### Key Directories
 
@@ -35,7 +35,7 @@ A comprehensive React dashboard that addresses **all 12 client requirements** fr
 Run the full analysis to export the dashboard dataset and copy it into the React app:
 
 ```bash
-python run_analysis.py
+python run_ade_analysis.py
 # dashboard-data.json will be written to data/outputs/dashboard/ and dashboard/public/
 ```
 
@@ -155,7 +155,7 @@ Eye-catching gradient cards showing:
 
 ### Updating Data
 
-Run `python run_analysis.py` to regenerate `dashboard-data.json` with the latest validated EPC data, scenario modelling, and spatial summaries. The JSON is copied automatically into `dashboard/public/` for the React app and `data/outputs/dashboard/` for archives.
+Run `python run_ade_analysis.py` to regenerate `dashboard-data.json` with the latest validated EPC data, scenario modelling, and spatial summaries. The JSON is copied automatically into `dashboard/public/` for the React app and `data/outputs/dashboard/` for archives.
 
 For mock/demo tweaks without rerunning the analysis, you can still adjust `dashboard/src/data/mockData.js`; these values are only used if the live dataset is unavailable.
 
@@ -234,7 +234,7 @@ Copy the built `dist/` folder plus `dashboard-data.json` to a USB drive or local
 ## 📞 Next Steps
 
 ### Immediate Use
-1. Run `python run_analysis.py` to refresh `dashboard-data.json`
+1. Run `python run_ade_analysis.py` to refresh `dashboard-data.json`
 2. Start the dev server with `npm run dev` inside `dashboard/`
 3. Navigate through tabs to review all 12 sections
 4. Share the built `dist/` folder (plus `dashboard-data.json`) with stakeholders
