@@ -220,7 +220,7 @@ def phase_3_geographic_enrichment(df):
     return df_enriched
 
 
-def phase_3b_heat_network_proximity(df, sample_size: int = 50000):
+def phase_3b_heat_network_proximity(df, sample_size: int | None = None):
     """
     Optional: analyze proximity to DESNZ heat network planning database.
 
@@ -234,9 +234,11 @@ def phase_3b_heat_network_proximity(df, sample_size: int = 50000):
         console.print("[yellow]⚠ POSTCODE column not found - skipping heat network proximity[/yellow]")
         return None, None
 
-    # Sample to keep runtime manageable
-    if sample_size and len(df) > sample_size:
-        console.print(f"[yellow]Sampling {sample_size:,} properties for proximity analysis out of {len(df):,}[/yellow]")
+    # Optionally sample to keep runtime manageable when requested
+    if sample_size is not None and len(df) > sample_size:
+        console.print(
+            f"[yellow]Sampling {sample_size:,} properties for proximity analysis out of {len(df):,}[/yellow]"
+        )
         df_sample = df.sample(n=sample_size, random_state=42)
     else:
         df_sample = df
