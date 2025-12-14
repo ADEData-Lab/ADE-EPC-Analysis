@@ -122,23 +122,10 @@ This runs all phases (may take 10-30 minutes depending on data size).
 
 ### Individual Phases
 
-Run phases separately:
+Run the national pipeline end-to-end:
 
 ```powershell
-# Clean and validate data
-python main.py --phase clean
-
-# Analyze property characteristics
-python main.py --phase analyze
-
-# Model scenarios
-python main.py --phase model
-
-# Spatial analysis
-python main.py --phase spatial
-
-# Generate reports
-python main.py --phase report
+python run_ade_analysis.py
 ```
 
 ## Viewing Results
@@ -159,11 +146,11 @@ explorer data\outputs\maps
 ### View Text Reports
 
 ```powershell
-# View archetype analysis
-type data\outputs\archetype_analysis_results.txt
+# View heat pump potential summary
+type data\outputs\heat_pump_potential_results.txt
 
-# View scenario results
-type data\outputs\scenario_modeling_results.txt
+# View heat network potential summary
+type data\outputs\heat_network_potential_results.txt
 
 # View executive summary
 type data\outputs\reports\executive_summary.txt

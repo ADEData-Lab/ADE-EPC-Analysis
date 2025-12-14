@@ -79,6 +79,8 @@ python run_ade_analysis.py
 4. **Policy analysis** – Runs heating fuel, heat pump, heat network, demand reduction, consumer impact, and policy scenario analyzers; constituency-level rollups are generated automatically.
 5. **Reporting** – Summarises results to `data/outputs/reports` and writes CSV outputs for downstream dashboards.
 
+Legacy London-specific archetype and scenario/pathway modeling code now lives under `legacy/` for reference and is no longer part of the active pipeline.
+
 You can rerun individual phases by commenting within `main()` or by calling the helper functions directly (see `phase_*` functions in `run_ade_analysis.py`).
 
 ## Key outputs

@@ -1,6 +1,6 @@
 # Interactive Analysis Mode
 
-Run the complete EPC analysis from start to finish in one window with interactive prompts.
+**Note:** The interactive pipeline is now retired because the scenario and archetype modelers have moved to the `legacy/` directory. Use `python run_ade_analysis.py` for the active national analysis (heating fuel, heat pump potential, heat network potential, demand reduction, consumer impact, and policy scenarios).
 
 ## Quick Start
 
@@ -19,21 +19,12 @@ run.bat
 ### Linux/Mac
 
 ```bash
-python run_analysis.py
+python run_ade_analysis.py
 ```
 
 ## What It Does
 
-The interactive mode runs the complete analysis pipeline:
-
-1. **✓ Checks credentials** - Prompts for API credentials if missing
-2. **✓ Downloads data** - Fetches EPC data via API with your choice of scope
-3. **✓ Validates data** - Runs quality checks and cleaning
-4. **✓ Analyzes properties** - Characterizes the housing stock
-5. **✓ Models scenarios** - Calculates costs and impacts for decarbonization
-6. **✓ Generates reports** - Creates charts and summaries
-
-All in one seamless workflow!
+The legacy interactive mode previously ran a London-focused pipeline. Current national workflows are automated via `run_ade_analysis.py`, which handles data acquisition, validation, national policy analyzers, and reporting without the retired scenario/pathway modelers.
 
 ## Interactive Prompts
 
@@ -99,8 +90,9 @@ Real-time progress indicators:
 - `validation_report.txt` - Quality assurance summary
 
 **data/outputs/**
-- `archetype_analysis_results.txt` - Property characteristics
-- `scenario_modeling_results.txt` - Scenario cost-benefit
+- `heat_pump_potential_results.txt` - National conversion readiness summary
+- `heat_network_potential_results.txt` - Heat network proximity tiers
+- `demand_reduction_results.txt` - Fabric improvement pathway to EPC C
 - `figures/` - Charts and graphs
 - `reports/` - Executive summaries
 

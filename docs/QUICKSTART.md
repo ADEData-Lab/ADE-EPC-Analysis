@@ -65,28 +65,14 @@ python main.py --phase all
 This will:
 1. ✅ Filter and process EPC data
 2. ✅ Validate and clean data
-3. ✅ Characterize the housing stock
-4. ✅ Model decarbonization scenarios
-5. ✅ Analyze heat network zones
-6. ✅ Generate reports and visualizations
+3. ✅ Run national policy analyzers (heating fuel, heat pump potential, heat network potential, demand reduction)
+4. ✅ Generate reports and visualizations
 
 ### Step by Step (Recommended for Learning)
 
 ```bash
 # Step 1: Clean and validate data
-python main.py --phase clean
-
-# Step 2: Analyze property characteristics
-python main.py --phase analyze
-
-# Step 3: Model scenarios
-python main.py --phase model
-
-# Step 4: Spatial analysis
-python main.py --phase spatial
-
-# Step 5: Generate reports
-python main.py --phase report
+python run_ade_analysis.py  # runs the full national pipeline
 ```
 
 ## Check Your Results
@@ -96,9 +82,6 @@ After running the analysis, check these locations:
 ```bash
 # Validated data
 ls data/processed/
-
-# Analysis results
-cat data/outputs/archetype_analysis_results.txt
 
 # Visualizations
 ls data/outputs/figures/
@@ -119,12 +102,12 @@ xdg-open data/outputs/maps/heat_network_tiers.html  # Linux
 
 | File | What It Shows |
 |------|---------------|
-| `epc_london_validated.csv` | Your cleaned dataset |
-| `archetype_analysis_results.txt` | Summary statistics of the housing stock |
-| `scenario_modeling_results.txt` | Cost-benefit analysis of different pathways |
-| `pathway_suitability_by_tier.csv` | Which properties suit heat networks vs heat pumps |
+| `epc_england_wales_validated.parquet` | Your cleaned dataset |
+| `heating_fuel_results.txt` | National heating fuel mix and gas boiler counts |
+| `heat_pump_potential_results.txt` | Conversion readiness and potential heat pump uptake |
+| `heat_network_potential_results.txt` | Properties within heat network proximity tiers |
+| `demand_reduction_results.txt` | Fabric upgrade needs and EPC-C readiness |
 | `epc_band_distribution.png` | Visual of current EPC ratings |
-| `scenario_comparison.png` | Visual comparison of decarbonization options |
 | `heat_network_tiers.html` | Interactive map of your properties |
 
 ## Customizing Your Analysis
@@ -198,7 +181,7 @@ Then run analysis on sample to verify everything works.
 
 1. **Review the full README.md** for detailed documentation
 2. **Explore the results** in `data/outputs/`
-3. **Customize scenarios** in `config/config.yaml`
+3. **Adjust policy assumptions** in `config/config.yaml`
 4. **Run sensitivity analyses** for different subsidy levels
 5. **Generate custom visualizations** using the API
 
@@ -211,30 +194,18 @@ Then run analysis on sample to verify everything works.
 
 ## Example Workflow
 
-Here's a typical workflow:
+Here's a typical workflow for the national pipeline:
 
 ```bash
-# Day 1: Get data and validate
-python main.py --phase acquire --download
-# ... download EPC data per instructions ...
-python main.py --phase acquire
-python main.py --phase clean
+# Day 1: Acquire and validate data
+python run_ade_analysis.py
+# Review: data/outputs/heat_pump_potential_results.txt
 
-# Day 2: Initial analysis
-python main.py --phase analyze
-# Review: data/outputs/archetype_analysis_results.txt
+# Day 2: Explore spatial outputs (if spatial dependencies installed)
+ls data/outputs/maps/
 
-# Day 3: Scenario modeling
-python main.py --phase model
-# Review: data/outputs/scenario_modeling_results.txt
-
-# Day 4: Spatial analysis (if you have heat map data)
-python main.py --phase spatial
-# Review: data/outputs/maps/heat_network_tiers.html
-
-# Day 5: Generate reports
-python main.py --phase report
-# Review: data/outputs/reports/executive_summary.txt
+# Day 3: Review policy reports
+ls data/outputs/reports/
 ```
 
 ## Success Checklist
@@ -243,7 +214,7 @@ python main.py --phase report
 - [ ] Virtual environment created and activated
 - [ ] Dependencies installed (`pip install -r requirements.txt`)
 - [ ] EPC data obtained and placed in `data/raw/`
-- [ ] First pipeline run completed (`python main.py --phase all`)
+- [ ] First pipeline run completed (`python run_ade_analysis.py`)
 - [ ] Results reviewed in `data/outputs/`
 - [ ] Configuration customized for your needs
 
