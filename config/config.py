@@ -41,9 +41,15 @@ def load_config(config_file: str = "config.yaml") -> Dict[str, Any]:
 
 
 def get_london_boroughs() -> list:
-    """Get list of London boroughs from config."""
+    """Return configured borough list if present (legacy helper)."""
+
     config = load_config()
-    return config['geography']['boroughs']
+    geography = config.get('geography', {})
+
+    # Older versions of the project relied on an explicit London borough list.
+    # The national-scale configuration does not require this, so default to an
+    # empty list when the field is absent to keep legacy callers stable.
+    return geography.get('boroughs', [])
 
 
 def get_property_filters() -> Dict[str, Any]:
@@ -150,7 +156,7 @@ if __name__ == "__main__":
     config = load_config()
     print("Configuration loaded successfully!")
     print(f"Project: {config['project']['name']}")
-    print(f"Number of London boroughs: {len(config['geography']['boroughs'])}")
+    print(f"Geography scope: {config.get('geography', {}).get('scope', 'N/A')}")
 
     # Ensure directories exist
     ensure_directories()
