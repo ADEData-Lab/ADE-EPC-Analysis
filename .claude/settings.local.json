@@ -20,7 +20,13 @@
       "Bash(python run_ade_analysis.py:*)",
       "Bash(python:*)",
       "Bash(set:*)",
-      "Bash(PYTHONUTF8=1 python:*)"
+      "Bash(PYTHONUTF8=1 python:*)",
+      "WebFetch(domain:geoportal.statistics.gov.uk)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "WebFetch(domain:www.data.gov.uk)",
+      "WebFetch(domain:www.gov.uk)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

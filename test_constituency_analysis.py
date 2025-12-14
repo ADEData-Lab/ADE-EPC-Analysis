@@ -17,6 +17,15 @@ import pandas as pd
 
 def main():
     """Test constituency analysis on existing data."""
+    # Load constituency lookup
+    lookup_file = Path("data/supplementary/constituency_lookup.csv")
+    if lookup_file.exists():
+        constituency_lookup = pd.read_csv(lookup_file)
+        logger.info(f"Loaded constituency lookup with {len(constituency_lookup)} constituencies")
+    else:
+        logger.warning("No constituency lookup file found - will use codes only")
+        constituency_lookup = None
+
     # Load enriched data
     enriched_file = DATA_PROCESSED_DIR / "epc_england_wales_enriched.parquet"
 
@@ -72,6 +81,26 @@ def main():
         df['fuel_category'] = df['MAIN_FUEL'].apply(fuel_analyzer.categorize_fuel_type)
         logger.info("Fuel categories added")
 
+    # Function to add constituency names
+    def add_constituency_names(result_df, constituency_lookup):
+        """Add constituency names to results dataframe."""
+        if constituency_lookup is not None:
+            result_df = result_df.merge(
+                constituency_lookup,
+                left_on='constituency',
+                right_on='CONSTITUENCY',
+                how='left'
+            )
+            # Reorder columns to put name first
+            cols = list(result_df.columns)
+            if 'CONSTITUENCY_LABEL' in cols:
+                cols.remove('CONSTITUENCY_LABEL')
+                cols.remove('CONSTITUENCY')
+                cols = ['constituency', 'CONSTITUENCY_LABEL'] + [c for c in cols if c != 'constituency']
+                result_df = result_df[cols]
+                result_df.rename(columns={'CONSTITUENCY_LABEL': 'constituency_name'}, inplace=True)
+        return result_df
+
     # 1. Fuel Mix by Constituency
     logger.info("\n=== HEATING FUEL MIX BY CONSTITUENCY ===")
     if 'fuel_category' in df.columns:
@@ -86,6 +115,9 @@ def main():
         fuel_by_const['total_properties'] = const_counts
         fuel_by_const = fuel_by_const.reset_index()
         fuel_by_const.rename(columns={constituency_col: 'constituency'}, inplace=True)
+
+        # Add constituency names
+        fuel_by_const = add_constituency_names(fuel_by_const, constituency_lookup)
 
         output_path = DATA_OUTPUTS_DIR / "constituency_fuel_mix.csv"
         fuel_by_const.to_csv(output_path, index=False)
@@ -117,6 +149,9 @@ def main():
         epc_by_const = epc_by_const.reset_index()
         epc_by_const.rename(columns={constituency_col: 'constituency'}, inplace=True)
 
+        # Add constituency names
+        epc_by_const = add_constituency_names(epc_by_const, constituency_lookup)
+
         output_path = DATA_OUTPUTS_DIR / "constituency_epc_distribution.csv"
         epc_by_const.to_csv(output_path, index=False)
         logger.info(f"Saved: {output_path} ({len(epc_by_const)} constituencies)")
@@ -143,6 +178,9 @@ def main():
         hp_by_const['pct_ready_or_minor'] = hp_by_const['ready_or_minor'] / hp_by_const['total_properties'] * 100
         hp_by_const = hp_by_const.reset_index()
         hp_by_const.rename(columns={constituency_col: 'constituency'}, inplace=True)
+
+        # Add constituency names
+        hp_by_const = add_constituency_names(hp_by_const, constituency_lookup)
 
         output_path = DATA_OUTPUTS_DIR / "constituency_heat_pump_potential.csv"
         hp_by_const.to_csv(output_path, index=False)
@@ -172,6 +210,9 @@ def main():
         hn_by_const['density_tier'] = hn_by_const['total_properties'].apply(classify_density)
         hn_by_const = hn_by_const.reset_index()
         hn_by_const.rename(columns={constituency_col: 'constituency'}, inplace=True)
+
+        # Add constituency names
+        hn_by_const = add_constituency_names(hn_by_const, constituency_lookup)
 
         output_path = DATA_OUTPUTS_DIR / "constituency_heat_network_potential.csv"
         hn_by_const.to_csv(output_path, index=False)
@@ -206,6 +247,9 @@ def main():
 
     const_summary = const_summary.reset_index()
     const_summary.rename(columns={constituency_col: 'constituency'}, inplace=True)
+
+    # Add constituency names
+    const_summary = add_constituency_names(const_summary, constituency_lookup)
 
     output_path = DATA_OUTPUTS_DIR / "constituency_summary.csv"
     const_summary.to_csv(output_path, index=False)
