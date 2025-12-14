@@ -16,7 +16,7 @@ $mapsPath = "$resultsPath\maps"
 if (-not (Test-Path $resultsPath)) {
     Write-Host "✗ No results found" -ForegroundColor Red
     Write-Host "Please run the analysis first:" -ForegroundColor Yellow
-    Write-Host "  .\run-analysis.ps1" -ForegroundColor Gray
+    Write-Host "  python run_ade_analysis.py" -ForegroundColor Gray
     exit 1
 }
 
@@ -28,12 +28,10 @@ Write-Host "2. View figures (charts)" -ForegroundColor White
 Write-Host "3. View reports (text)" -ForegroundColor White
 Write-Host "4. View interactive map" -ForegroundColor White
 Write-Host "5. View executive summary" -ForegroundColor White
-Write-Host "6. View archetype analysis" -ForegroundColor White
-Write-Host "7. View scenario results" -ForegroundColor White
-Write-Host "8. Exit" -ForegroundColor White
+Write-Host "6. Exit" -ForegroundColor White
 Write-Host ""
 
-$choice = Read-Host "Select option (1-8)"
+$choice = Read-Host "Select option (1-6)"
 
 switch ($choice) {
     "1" {
@@ -68,7 +66,7 @@ switch ($choice) {
         } else {
             Write-Host "✗ Map file not found" -ForegroundColor Red
             Write-Host "Run spatial analysis phase to generate map:" -ForegroundColor Yellow
-            Write-Host "  python main.py --phase spatial" -ForegroundColor Gray
+            Write-Host "  python run_ade_analysis.py" -ForegroundColor Gray
         }
     }
     "5" {
@@ -80,34 +78,10 @@ switch ($choice) {
         } else {
             Write-Host "✗ Executive summary not found" -ForegroundColor Red
             Write-Host "Run report phase to generate summary:" -ForegroundColor Yellow
-            Write-Host "  python main.py --phase report" -ForegroundColor Gray
+            Write-Host "  python run_ade_analysis.py" -ForegroundColor Gray
         }
     }
     "6" {
-        Write-Host "Displaying archetype analysis..." -ForegroundColor Yellow
-        Write-Host ""
-        $archetypeFile = "$resultsPath\archetype_analysis_results.txt"
-        if (Test-Path $archetypeFile) {
-            Get-Content $archetypeFile
-        } else {
-            Write-Host "✗ Archetype analysis not found" -ForegroundColor Red
-            Write-Host "Run analyze phase:" -ForegroundColor Yellow
-            Write-Host "  python main.py --phase analyze" -ForegroundColor Gray
-        }
-    }
-    "7" {
-        Write-Host "Displaying scenario results..." -ForegroundColor Yellow
-        Write-Host ""
-        $scenarioFile = "$resultsPath\scenario_modeling_results.txt"
-        if (Test-Path $scenarioFile) {
-            Get-Content $scenarioFile
-        } else {
-            Write-Host "✗ Scenario results not found" -ForegroundColor Red
-            Write-Host "Run model phase:" -ForegroundColor Yellow
-            Write-Host "  python main.py --phase model" -ForegroundColor Gray
-        }
-    }
-    "8" {
         Write-Host "Goodbye!" -ForegroundColor Green
         exit 0
     }

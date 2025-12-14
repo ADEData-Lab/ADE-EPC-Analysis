@@ -194,33 +194,6 @@ class OutputValidator:
 
         return all_passed
 
-    def validate_payback_calculations(self, df: pd.DataFrame = None) -> bool:
-        """Validate payback calculations are not NaN."""
-        logger.info("\n" + "="*60)
-        logger.info("VALIDATING PAYBACK CALCULATIONS")
-        logger.info("="*60)
-
-        # Try to load scenario results
-        scenario_file = DATA_OUTPUTS_DIR / "scenario_modeling_results.txt"
-        if not scenario_file.exists():
-            logger.warning("Scenario results file not found, skipping payback validation")
-            return True
-
-        # Read file and check for NaN
-        with open(scenario_file, 'r') as f:
-            content = f.read()
-
-        all_passed = True
-
-        # Check for "nan" in payback values
-        has_nan = 'average_payback_years: nan' in content.lower() or 'payback_years: nan' in content.lower()
-        all_passed &= self.check(
-            not has_nan,
-            "No NaN values in payback calculations"
-        )
-
-        return all_passed
-
     def validate_case_street_extract(self) -> bool:
         """Validate Shakespeare Crescent extract exists and has records."""
         logger.info("\n" + "="*60)
@@ -302,7 +275,6 @@ class OutputValidator:
         all_passed &= self.validate_co2_emissions(df)
         all_passed &= self.validate_retrofit_tiers(df)
         all_passed &= self.validate_wall_insulation(df)
-        all_passed &= self.validate_payback_calculations(df)
         all_passed &= self.validate_case_street_extract()
         all_passed &= self.validate_borough_breakdown()
 

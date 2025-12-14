@@ -95,11 +95,11 @@ if errorlevel 1 (
 REM Run the interactive analysis
 echo.
 echo ========================================
-echo Starting Interactive Analysis
+echo Starting National Pipeline
 echo ========================================
 echo.
 
-python run_analysis.py
+python run_ade_analysis.py
 
 if %errorlevel% equ 0 (
     echo.
