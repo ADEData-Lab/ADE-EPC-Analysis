@@ -37,8 +37,8 @@ ADE-EPC-Analysis/
 ## Quick start
 ### Recommended: Conda launcher (Windows-friendly, supports spatial analysis)
 ```bash
-# Clone the repo
-git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
+# Clone the repo (replace with your fork or the upstream ADEData-Lab repo)
+git clone https://github.com/ADEData-Lab/ADE-EPC-Analysis.git
 cd ADE-EPC-Analysis
 
 # Windows Command Prompt
@@ -51,7 +51,7 @@ This creates a Python 3.11 environment, installs geopandas/GDAL, installs other 
 
 ### Standard launcher (core analysis only)
 ```bash
-git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
+git clone https://github.com/ADEData-Lab/ADE-EPC-Analysis.git
 cd ADE-EPC-Analysis
 
 # Windows Command Prompt

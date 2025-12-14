@@ -36,6 +36,13 @@ def setup_logging(log_file: Path | None = None) -> None:
         )
 
 
+def main(log_file: Path | None = None) -> None:
+    """Run the national pipeline with standard logging configuration."""
+
+    setup_logging(log_file)
+    run_national_pipeline()
+
+
 if __name__ == "__main__":
     setup_logging()
     run_national_pipeline()
