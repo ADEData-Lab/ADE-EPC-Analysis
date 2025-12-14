@@ -7,10 +7,13 @@ that 36-62% of EPCs contain errors.
 
 import pandas as pd
 import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from loguru import logger
 from datetime import datetime
+from tqdm import tqdm
 
 import sys
 sys.path.append(str(Path(__file__).parent.parent.parent))
@@ -74,6 +77,152 @@ class EPCDataValidator:
 
         return df, self.validation_report
 
+    def validate_dataset_chunked(
+        self,
+        input_path: Path,
+        output_path: Path,
+        chunk_size: int = 500000
+    ) -> Tuple[Path, Dict]:
+        """
+        Run validation pipeline on large EPC dataset using chunked processing.
+
+        Memory-efficient approach:
+        1. First pass: Build UPRN→most_recent_date lookup for deduplication
+        2. Second pass: Filter duplicates, validate, standardize, write chunks
+
+        Args:
+            input_path: Path to input parquet file
+            output_path: Path to output validated parquet file
+            chunk_size: Number of rows per chunk (default 500K)
+
+        Returns:
+            Tuple of (output_path, validation_report)
+        """
+        logger.info(f"Starting chunked validation of {input_path}")
+
+        # Get total row count
+        parquet_file = pq.ParquetFile(input_path)
+        total_rows = parquet_file.metadata.num_rows
+        self.validation_report['total_records'] = total_rows
+        logger.info(f"Total records to process: {total_rows:,}")
+
+        # ============================================
+        # PHASE 1: Build deduplication lookup
+        # ============================================
+        logger.info("Phase 1: Building deduplication lookup (UPRN → most recent date)...")
+
+        # Track most recent lodgement date per UPRN
+        uprn_latest: Dict[str, str] = {}
+        rows_processed = 0
+
+        for batch in tqdm(parquet_file.iter_batches(batch_size=chunk_size),
+                         desc="Building UPRN lookup",
+                         total=(total_rows // chunk_size) + 1):
+            df_chunk = batch.to_pandas()
+
+            # Standardize column names for this chunk
+            df_chunk.columns = df_chunk.columns.str.replace('-', '_').str.upper()
+
+            if 'UPRN' in df_chunk.columns and 'LODGEMENT_DATE' in df_chunk.columns:
+                for _, row in df_chunk[['UPRN', 'LODGEMENT_DATE']].iterrows():
+                    uprn = str(row['UPRN'])
+                    date = str(row['LODGEMENT_DATE'])
+
+                    if uprn and uprn != '' and uprn != 'nan':
+                        if uprn not in uprn_latest or date > uprn_latest[uprn]:
+                            uprn_latest[uprn] = date
+
+            rows_processed += len(df_chunk)
+            del df_chunk
+
+        logger.info(f"Found {len(uprn_latest):,} unique UPRNs")
+
+        # ============================================
+        # PHASE 2: Validate and write chunks
+        # ============================================
+        logger.info("Phase 2: Validating and writing chunks...")
+
+        temp_path = output_path.with_suffix('.parquet.tmp')
+        writer = None
+        schema = None
+        total_validated = 0
+        duplicates_removed = 0
+
+        parquet_file = pq.ParquetFile(input_path)  # Reopen for second pass
+
+        for batch in tqdm(parquet_file.iter_batches(batch_size=chunk_size),
+                         desc="Validating chunks",
+                         total=(total_rows // chunk_size) + 1):
+            df_chunk = batch.to_pandas()
+
+            # Standardize column names
+            df_chunk = self._standardize_column_names(df_chunk)
+
+            initial_chunk_size = len(df_chunk)
+
+            # --- Deduplication: Keep only most recent per UPRN ---
+            if 'UPRN' in df_chunk.columns and 'LODGEMENT_DATE' in df_chunk.columns:
+                # Filter to keep only rows where this is the most recent record
+                mask = df_chunk.apply(
+                    lambda row: str(row['LODGEMENT_DATE']) == uprn_latest.get(str(row['UPRN']), ''),
+                    axis=1
+                )
+                df_chunk = df_chunk[mask].copy()
+                duplicates_removed += initial_chunk_size - len(df_chunk)
+
+            if len(df_chunk) == 0:
+                continue
+
+            # Flag as most recent (all remaining are most recent)
+            df_chunk['is_most_recent'] = True
+
+            # --- Convert string columns back to proper numeric types ---
+            df_chunk = self._convert_numeric_columns(df_chunk)
+
+            # --- Apply row-level validations ---
+            df_chunk = self.validate_floor_areas(df_chunk)
+            df_chunk = self.validate_built_form(df_chunk)
+            df_chunk = self.validate_critical_fields(df_chunk)
+            df_chunk = self.validate_insulation_logic(df_chunk)
+
+            # --- Standardize fields ---
+            df_chunk = self.standardize_fields(df_chunk)
+
+            if len(df_chunk) == 0:
+                continue
+
+            # Convert to PyArrow and write
+            table = pa.Table.from_pandas(df_chunk, preserve_index=False)
+
+            if writer is None:
+                schema = table.schema
+                writer = pq.ParquetWriter(str(temp_path), schema, compression='snappy')
+                logger.info(f"Initialized output with {len(schema)} columns")
+
+            writer.write_table(table)
+            total_validated += len(df_chunk)
+
+            del df_chunk
+            del table
+
+        # Finalize
+        if writer is not None:
+            writer.close()
+
+            if output_path.exists():
+                output_path.unlink()
+            temp_path.rename(output_path)
+
+        self.validation_report['duplicates_removed'] = duplicates_removed
+        self.validation_report['records_passed'] = total_validated
+
+        logger.info(f"Validated dataset saved: {output_path}")
+        logger.info(f"Total validated records: {total_validated:,}")
+
+        self.log_validation_summary()
+
+        return output_path, self.validation_report
+
     def _standardize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Standardize column names from EPC API format (hyphenated) to expected format (uppercase with underscores).
@@ -84,13 +233,54 @@ class EPCDataValidator:
         Returns:
             DataFrame with standardized column names
         """
-        logger.info("Standardizing column names from EPC API format...")
-
         # Convert hyphenated lowercase to uppercase with underscores
         # e.g., 'current-energy-rating' -> 'CURRENT_ENERGY_RATING'
         df.columns = df.columns.str.replace('-', '_').str.upper()
 
-        logger.info(f"Standardized {len(df.columns)} column names")
+        return df
+
+    def _convert_numeric_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Convert known numeric columns from strings back to proper numeric types.
+
+        The data acquisition phase converts all columns to strings for consistent schema.
+        This method restores proper numeric types for validation and analysis.
+
+        Args:
+            df: DataFrame with string columns
+
+        Returns:
+            DataFrame with numeric columns converted
+        """
+        # Columns that should be numeric (floats)
+        float_columns = [
+            'TOTAL_FLOOR_AREA', 'CO2_EMISSIONS_CURRENT', 'CO2_EMISSIONS_POTENTIAL',
+            'CO2_EMISS_CURR_PER_FLOOR_AREA', 'ENERGY_CONSUMPTION_CURRENT',
+            'ENERGY_CONSUMPTION_POTENTIAL', 'LIGHTING_COST_CURRENT', 'LIGHTING_COST_POTENTIAL',
+            'HEATING_COST_CURRENT', 'HEATING_COST_POTENTIAL', 'HOT_WATER_COST_CURRENT',
+            'HOT_WATER_COST_POTENTIAL', 'FLAT_STOREY_COUNT', 'MULTI_GLAZE_PROPORTION',
+            'EXTENSION_COUNT', 'NUMBER_HABITABLE_ROOMS', 'NUMBER_HEATED_ROOMS',
+            'LOW_ENERGY_LIGHTING', 'NUMBER_OPEN_FIREPLACES', 'SHEATING_ENERGY_EFF',
+            'SHEATING_ENV_EFF', 'WIND_TURBINE_COUNT', 'UNHEATED_CORRIDOR_LENGTH',
+            'FLOOR_HEIGHT', 'PHOTO_SUPPLY', 'FIXED_LIGHTING_OUTLETS_COUNT',
+            'LOW_ENERGY_FIXED_LIGHT_COUNT', 'UPRN'
+        ]
+
+        # Columns that should be integers
+        int_columns = [
+            'BUILDING_REFERENCE_NUMBER', 'CURRENT_ENERGY_EFFICIENCY', 'POTENTIAL_ENERGY_EFFICIENCY',
+            'ENVIRONMENT_IMPACT_CURRENT', 'ENVIRONMENT_IMPACT_POTENTIAL'
+        ]
+
+        for col in float_columns:
+            if col in df.columns:
+                # Convert to numeric, coercing errors to NaN
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+
+        for col in int_columns:
+            if col in df.columns:
+                # Convert to numeric first, then to nullable int
+                df[col] = pd.to_numeric(df[col], errors='coerce')
 
         return df
 
@@ -149,6 +339,9 @@ class EPCDataValidator:
         min_area = self.quality_thresholds['min_floor_area']
         max_area = self.quality_thresholds['max_floor_area']
 
+        # Always create column for consistent schema across chunks
+        df['floor_area_valid'] = True
+
         if 'TOTAL_FLOOR_AREA' in df.columns:
             # Flag implausible values
             df['floor_area_valid'] = (
@@ -166,7 +359,7 @@ class EPCDataValidator:
             df = df[df['floor_area_valid']].copy()
             self.validation_report['implausible_floor_areas'] = invalid_count
         else:
-            logger.warning("TOTAL_FLOOR_AREA column not found")
+            logger.warning("TOTAL_FLOOR_AREA column not found - all marked as valid")
 
         return df
 
@@ -182,6 +375,9 @@ class EPCDataValidator:
         """
         logger.info("Validating built form consistency...")
         initial_count = len(df)
+
+        # Always create column for consistent schema across chunks
+        df['built_form_consistent'] = True
 
         if 'BUILT_FORM' in df.columns and 'PROPERTY_TYPE' in df.columns:
             # Flag obvious inconsistencies (but don't remove - can be useful for analysis)
@@ -199,7 +395,7 @@ class EPCDataValidator:
 
             self.validation_report['inconsistent_built_form'] = inconsistent_count
         else:
-            logger.warning("BUILT_FORM or PROPERTY_TYPE column not found")
+            logger.warning("BUILT_FORM or PROPERTY_TYPE column not found - all marked as consistent")
 
         return df
 
@@ -304,6 +500,9 @@ class EPCDataValidator:
         # Example: cavity wall insulation in solid-wall properties
         illogical_count = 0
 
+        # Always create the column for consistent schema across chunks
+        df['insulation_logic_flag'] = False
+
         if 'WALLS_DESCRIPTION' in df.columns:
             # Check for cavity insulation claimed in solid wall properties
             solid_wall_mask = df['WALLS_DESCRIPTION'].str.contains(
@@ -316,10 +515,10 @@ class EPCDataValidator:
             illogical_mask = solid_wall_mask & cavity_insulation_mask
             illogical_count = illogical_mask.sum()
 
+            df['insulation_logic_flag'] = illogical_mask
+
             if illogical_count > 0:
                 logger.warning(f"Found {illogical_count:,} records with illogical insulation")
-                df['insulation_logic_flag'] = illogical_mask
-                # Don't remove, but flag for manual review
 
         self.validation_report['illogical_insulation'] = illogical_count
 
@@ -365,6 +564,9 @@ class EPCDataValidator:
 
     def _standardize_heating_systems(self, df: pd.DataFrame) -> pd.DataFrame:
         """Standardize heating system descriptions."""
+        # Always create column for consistent schema across chunks
+        df['heating_system_type'] = 'Unknown'
+
         if 'MAINHEAT_DESCRIPTION' in df.columns:
             df['heating_system_type'] = 'Other'
 
@@ -771,6 +973,11 @@ class EPCDataValidator:
         - Energy: 100-400 kWh/m²/year (mean typically 150-250)
         - CO2: 20-100 kgCO₂/m²/year (mean typically 40-60)
         """
+        # Always create columns for consistent schema across chunks
+        df['energy_kwh_per_m2_year'] = np.nan
+        df['co2_kg_per_m2_year'] = np.nan
+        df['energy_kwh_per_year_absolute'] = np.nan
+
         # Handle energy consumption
         if 'ENERGY_CONSUMPTION_CURRENT' in df.columns and 'TOTAL_FLOOR_AREA' in df.columns:
             # Check if ENERGY_CONSUMPTION_CURRENT appears to be absolute (kWh/year)

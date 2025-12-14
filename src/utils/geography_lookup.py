@@ -262,6 +262,9 @@ class GeographyLookup:
         - region_name
         - constituency_name
 
+        Uses existing EPC columns where available (LOCAL_AUTHORITY, LOCAL_AUTHORITY_LABEL),
+        falling back to external lookups only if needed.
+
         Args:
             df: EPC DataFrame
             postcode_col: Name of postcode column
@@ -271,42 +274,72 @@ class GeographyLookup:
         """
         logger.info("Enriching EPC data with geographic information...")
 
-        # Load lookup tables
-        postcode_lookup = self.load_postcode_lookup()
+        # First, try to use existing EPC columns directly
+        # EPC data typically includes LOCAL_AUTHORITY (code) and LOCAL_AUTHORITY_LABEL (name)
 
-        if postcode_lookup is None or postcode_lookup.empty:
-            logger.warning("No postcode lookup available - skipping geographic enrichment")
-            return df
+        # Add local_authority_name from existing EPC columns
+        if 'local_authority_name' not in df.columns:
+            if 'LOCAL_AUTHORITY_LABEL' in df.columns:
+                # Use the label column directly
+                df['local_authority_name'] = df['LOCAL_AUTHORITY_LABEL']
+                logger.info("Using LOCAL_AUTHORITY_LABEL for local_authority_name")
+            elif 'LOCAL_AUTHORITY' in df.columns:
+                # Use the code column - try to map to names
+                lad_names = self.get_lad_name_lookup()
+                df['local_authority_name'] = df['LOCAL_AUTHORITY'].map(lad_names)
+                # Fill unmapped values with the original code
+                df['local_authority_name'] = df['local_authority_name'].fillna(df['LOCAL_AUTHORITY'])
+                logger.info("Mapped LOCAL_AUTHORITY codes to names")
+            else:
+                logger.warning("No LOCAL_AUTHORITY column found in EPC data")
+                df['local_authority_name'] = 'Unknown'
 
-        # Clean postcodes
-        df['postcode_clean'] = df[postcode_col].str.upper().str.replace(' ', '')
+        # Add region_name - try to derive from local authority
+        if 'region_name' not in df.columns:
+            if 'LOCAL_AUTHORITY' in df.columns:
+                # Map LA codes to regions using prefix patterns
+                # E09 = London, E06/E07/E08/E10 = various regions
+                df['region_name'] = df['LOCAL_AUTHORITY'].apply(self._derive_region_from_la_code)
+                logger.info("Derived region_name from LOCAL_AUTHORITY codes")
+            else:
+                df['region_name'] = 'Unknown'
 
-        if 'postcode' in postcode_lookup.columns:
-            postcode_lookup['postcode_clean'] = postcode_lookup['postcode'].str.upper().str.replace(' ', '')
+        # Log summary
+        if 'local_authority_name' in df.columns:
+            unique_las = df['local_authority_name'].nunique()
+            logger.info(f"Geographic enrichment complete: {unique_las} unique local authorities")
 
-            # Merge
-            df_enriched = df.merge(
-                postcode_lookup,
-                on='postcode_clean',
-                how='left'
-            )
+        if 'region_name' in df.columns:
+            unique_regions = df['region_name'].nunique()
+            logger.info(f"  {unique_regions} unique regions")
 
-            # Add name lookups
-            lad_names = self.get_lad_name_lookup()
-            region_names = self.get_region_name_lookup()
+        return df
 
-            if 'local_authority' in df_enriched.columns:
-                df_enriched['local_authority_name'] = df_enriched['local_authority'].map(lad_names)
+    def _derive_region_from_la_code(self, la_code: str) -> str:
+        """
+        Derive region name from local authority code prefix.
 
-            if 'region' in df_enriched.columns:
-                df_enriched['region_name'] = df_enriched['region'].map(region_names)
+        Args:
+            la_code: Local authority code (e.g., 'E09000001')
 
-            logger.info("Geographic enrichment complete")
-            return df_enriched
+        Returns:
+            Region name
+        """
+        if pd.isna(la_code) or not isinstance(la_code, str):
+            return 'Unknown'
 
+        # London boroughs
+        if la_code.startswith('E09'):
+            return 'London'
+        # Wales
+        elif la_code.startswith('W'):
+            return 'Wales'
+        # Other English regions - would need a full lookup table
+        # For now, return 'England (Other)' for non-London
+        elif la_code.startswith('E'):
+            return 'England (Other)'
         else:
-            logger.warning("Postcode lookup format not recognized")
-            return df
+            return 'Unknown'
 
     def aggregate_by_geography(
         self,

@@ -71,7 +71,7 @@ class HeatingFuelAnalyzer:
 
         return 'other'
 
-    def analyze_fuel_mix(self, df: pd.DataFrame, fuel_col: str = 'MAINHEAT_ENERGY_EFF') -> Dict:
+    def analyze_fuel_mix(self, df: pd.DataFrame, fuel_col: str = 'MAIN_FUEL') -> Dict:
         """
         Analyze overall heating fuel mix.
 

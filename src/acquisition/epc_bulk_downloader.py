@@ -13,6 +13,8 @@ import requests
 from pathlib import Path
 from typing import List, Optional, Generator
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from tqdm import tqdm
 from loguru import logger
 from datetime import datetime
@@ -75,11 +77,21 @@ class EPCBulkDownloader:
         filename = self.BULK_FILES[region]
         output_path = output_dir / filename
 
-        # Check if file already exists
+        # Check if file already exists and is valid
         if output_path.exists() and not force_redownload:
+            file_size = output_path.stat().st_size
             logger.info(f"Bulk file already exists: {output_path}")
-            logger.info(f"File size: {output_path.stat().st_size / (1024**3):.2f} GB")
-            return output_path
+            logger.info(f"File size: {file_size / (1024**3):.2f} GB")
+
+            # Validate existing ZIP file
+            try:
+                with zipfile.ZipFile(output_path, 'r') as test_zip:
+                    test_zip.namelist()  # Quick validation
+                return output_path
+            except zipfile.BadZipFile:
+                logger.warning(f"Existing file is corrupted/invalid, will delete and re-download")
+                output_path.unlink()
+                # Fall through to download
 
         # Download file
         url = f"{self.BASE_URL}/{filename}"
@@ -132,7 +144,8 @@ class EPCBulkDownloader:
     def extract_bulk_file(
         self,
         zip_path: Path,
-        extract_dir: Optional[Path] = None
+        extract_dir: Optional[Path] = None,
+        certificates_only: bool = True
     ) -> List[Path]:
         """
         Extract a bulk EPC ZIP file.
@@ -140,6 +153,7 @@ class EPCBulkDownloader:
         Args:
             zip_path: Path to ZIP file
             extract_dir: Directory to extract to (default: same as ZIP)
+            certificates_only: If True, only return certificates.csv files (not recommendations.csv)
 
         Returns:
             List of extracted CSV file paths
@@ -148,6 +162,16 @@ class EPCBulkDownloader:
             extract_dir = zip_path.parent / zip_path.stem
 
         extract_dir.mkdir(parents=True, exist_ok=True)
+
+        # Check if files are already extracted
+        existing_csv_files = list(extract_dir.rglob('*.csv'))
+        if existing_csv_files:
+            logger.info(f"Found {len(existing_csv_files)} already extracted CSV files in {extract_dir}")
+            # Filter to certificates only (exclude recommendations.csv)
+            if certificates_only:
+                existing_csv_files = [p for p in existing_csv_files if 'certificates.csv' in p.name]
+                logger.info(f"Filtered to {len(existing_csv_files)} certificates files (excluding recommendations)")
+            return existing_csv_files
 
         logger.info(f"Extracting {zip_path.name}...")
 
@@ -167,7 +191,13 @@ class EPCBulkDownloader:
             # Get paths to extracted files
             extracted_paths = [extract_dir / f for f in csv_files]
 
-            logger.info(f"Extracted {len(extracted_paths)} files to {extract_dir}")
+            # Filter to certificates only (exclude recommendations.csv)
+            if certificates_only:
+                extracted_paths = [p for p in extracted_paths if 'certificates.csv' in p.name]
+                logger.info(f"Filtered to {len(extracted_paths)} certificates files (excluding recommendations)")
+            else:
+                logger.info(f"Extracted {len(extracted_paths)} files to {extract_dir}")
+
             return extracted_paths
 
         except zipfile.BadZipFile as e:
@@ -215,28 +245,25 @@ class EPCBulkDownloader:
             logger.error(f"Error reading CSV {csv_path}: {e}")
             raise
 
-    def _clean_dataframe_for_parquet(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _clean_chunk_for_parquet(self, chunk: pd.DataFrame) -> pd.DataFrame:
         """
-        Clean dataframe for parquet conversion by ensuring consistent types.
+        Clean a DataFrame chunk for parquet conversion IN-PLACE.
 
-        Converts all object columns to strings to avoid mixed type issues.
+        Converts ALL columns to strings to ensure consistent schema across files.
+        Different CSV files may have pandas infer different types for the same column.
+        Does NOT call df.copy() - modifies the chunk directly for memory efficiency.
 
         Args:
-            df: DataFrame to clean
+            chunk: DataFrame chunk to clean
 
         Returns:
-            Cleaned DataFrame
+            Same DataFrame reference with cleaned types
         """
-        # Make a copy to avoid modifying the original
-        df = df.copy()
+        for col in chunk.columns:
+            # Convert ALL columns to string to ensure consistent schema
+            chunk[col] = chunk[col].fillna('').astype(str)
 
-        # Convert all object columns to strings to avoid mixed type issues
-        for col in df.columns:
-            if df[col].dtype == 'object':
-                # Fill NaN with empty string, then convert everything to string
-                df[col] = df[col].fillna('').astype(str)
-
-        return df
+        return chunk
 
     def combine_bulk_data(
         self,
@@ -246,73 +273,91 @@ class EPCBulkDownloader:
         filters: Optional[dict] = None
     ) -> Path:
         """
-        Combine multiple bulk CSV files into a single dataset.
+        Combine multiple bulk CSV files into a single parquet dataset using streaming writes.
+
+        Uses PyArrow ParquetWriter for incremental writes - never loads entire dataset.
+        Memory usage stays constant regardless of total dataset size.
 
         Args:
             csv_paths: List of CSV file paths to combine
-            output_path: Output file path (default: DATA_RAW_DIR/combined_epc.parquet)
-            chunk_size: Chunk size for processing
+            output_path: Output file path (default: DATA_RAW_DIR/epc_england_wales_combined.parquet)
+            chunk_size: Number of rows per processing chunk
             filters: Optional filters to apply (e.g., {'PROPERTY_TYPE': ['House']})
 
         Returns:
-            Path to combined output file
+            Path to combined output parquet file
         """
         if output_path is None:
             output_path = DATA_RAW_DIR / "epc_england_wales_combined.parquet"
 
-        logger.info(f"Combining {len(csv_paths)} CSV files...")
+        logger.info(f"Combining {len(csv_paths)} CSV files using streaming writes...")
 
-        # Process and combine files
-        all_chunks = []
+        # Use a temporary file during processing, then rename on success
+        temp_path = output_path.with_suffix('.parquet.tmp')
+
+        writer = None
+        schema = None
         total_records = 0
 
-        for csv_path in csv_paths:
-            logger.info(f"Processing {csv_path.name}...")
+        try:
+            for csv_path in csv_paths:
+                logger.info(f"Processing {csv_path.name}...")
 
-            for chunk in self.load_csv_in_chunks(csv_path, chunk_size):
-                # Apply filters if specified
-                if filters:
-                    for column, values in filters.items():
-                        if column in chunk.columns:
-                            chunk = chunk[chunk[column].isin(values)]
+                for chunk in self.load_csv_in_chunks(csv_path, chunk_size):
+                    # Apply filters if specified
+                    if filters:
+                        for column, values in filters.items():
+                            if column in chunk.columns:
+                                chunk = chunk[chunk[column].isin(values)]
 
-                all_chunks.append(chunk)
-                total_records += len(chunk)
+                    # Skip empty chunks
+                    if len(chunk) == 0:
+                        continue
 
-                # Periodically save to avoid memory issues
-                if len(all_chunks) >= 10:
-                    logger.info(f"Saving intermediate batch ({total_records:,} records so far)...")
-                    temp_df = pd.concat(all_chunks, ignore_index=True)
+                    # Clean the chunk in-place for parquet compatibility
+                    chunk = self._clean_chunk_for_parquet(chunk)
 
-                    # Save or append
-                    if output_path.exists():
-                        # Append to existing file
-                        existing_df = pd.read_parquet(output_path)
-                        temp_df = pd.concat([existing_df, temp_df], ignore_index=True)
+                    # Convert to PyArrow Table
+                    table = pa.Table.from_pandas(chunk, preserve_index=False)
 
-                    # Clean data types AFTER concatenation before saving to parquet
-                    temp_df = self._clean_dataframe_for_parquet(temp_df)
+                    # Initialize writer with schema from first chunk
+                    if writer is None:
+                        schema = table.schema
+                        writer = pq.ParquetWriter(str(temp_path), schema, compression='snappy')
+                        logger.info(f"Initialized parquet writer with {len(schema)} columns")
 
-                    temp_df.to_parquet(output_path, index=False)
-                    all_chunks = []
+                    # Write this chunk
+                    writer.write_table(table)
+                    total_records += len(chunk)
 
-        # Save remaining chunks
-        if all_chunks:
-            logger.info(f"Saving final batch ({total_records:,} total records)...")
-            final_df = pd.concat(all_chunks, ignore_index=True)
+                    # Free memory explicitly
+                    del chunk
+                    del table
 
-            if output_path.exists():
-                existing_df = pd.read_parquet(output_path)
-                final_df = pd.concat([existing_df, final_df], ignore_index=True)
+            # Close writer to finalize file
+            if writer is not None:
+                writer.close()
+                writer = None  # Mark as closed
 
-            # Clean data types AFTER concatenation before saving to parquet
-            final_df = self._clean_dataframe_for_parquet(final_df)
+                # Rename temp file to final location
+                if output_path.exists():
+                    output_path.unlink()
+                temp_path.rename(output_path)
 
-            final_df.to_parquet(output_path, index=False)
+                logger.info(f"Combined dataset saved: {output_path}")
+                logger.info(f"Total records: {total_records:,}")
+                logger.info(f"File size: {output_path.stat().st_size / (1024**3):.2f} GB")
+            else:
+                logger.warning("No data written - all chunks were empty after filtering")
+                return None
 
-        logger.info(f"Combined dataset saved: {output_path}")
-        logger.info(f"Total records: {total_records:,}")
-        logger.info(f"File size: {output_path.stat().st_size / (1024**3):.2f} GB")
+        except Exception as e:
+            logger.error(f"Error during streaming write: {e}")
+            if writer is not None:
+                writer.close()
+            if temp_path.exists():
+                temp_path.unlink()
+            raise
 
         return output_path
 

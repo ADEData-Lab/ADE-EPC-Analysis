@@ -105,3 +105,14 @@ docs/_templates/
 
 # OS
 Thumbs.db
+
+# Windows reserved-name artefacts (can't be added)
+nul
+data/nul
+data/nul/
+
+# Likely-not-for-git artefacts in your status output
+data/raw/
+*.zip
+*.docx
+

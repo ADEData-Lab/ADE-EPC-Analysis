@@ -33,6 +33,11 @@ class DemandReductionAnalyzer:
     # EPC band hierarchy
     EPC_BANDS = ['G', 'F', 'E', 'D', 'C', 'B', 'A']
 
+    # National housing stock estimates (England & Wales, 2023)
+    NATIONAL_HOUSING_STOCK = 24_000_000  # ~24 million homes
+    NATIONAL_SOLID_WALL_HOMES = 8_000_000  # ~8 million solid wall homes
+    NATIONAL_CAVITY_WALL_HOMES = 14_000_000  # ~14 million cavity wall homes
+
     # Typical fabric improvements and savings
     FABRIC_MEASURES = {
         'loft_insulation': {
@@ -291,6 +296,156 @@ class DemandReductionAnalyzer:
         self.results['path_to_epc_c'] = results
         return results
 
+    def calculate_national_investment(self, df: pd.DataFrame) -> Dict:
+        """
+        Calculate national-scale investment estimates for fabric retrofit.
+
+        Extrapolates from our dataset to the full England & Wales housing stock.
+        Aligned with ADE's emphasis on quantifying the scale of the retrofit challenge.
+
+        Args:
+            df: EPC DataFrame
+
+        Returns:
+            Dictionary with national investment estimates
+        """
+        logger.info("Calculating national retrofit investment estimates...")
+
+        total_properties = len(df)
+        results = {
+            'sample_size': total_properties,
+            'national_stock_estimate': self.NATIONAL_HOUSING_STOCK,
+            'measures': {}
+        }
+
+        # Cost assumptions
+        costs = self.config.get('costs', {})
+        loft_cost = costs.get('loft_insulation_topup', 1200)
+        cavity_cost = costs.get('cavity_wall_insulation', 2500)
+        solid_ewi_cost = costs.get('solid_wall_insulation_ewi', 10000)
+        solid_iwi_cost = costs.get('solid_wall_insulation_iwi', 14000)
+        glazing_cost = costs.get('double_glazing_upgrade', 6000)
+        floor_cost = costs.get('floor_insulation', 1500)
+
+        # Loft insulation
+        if 'needs_improvement' in self.results.get('fabric_potential', {}):
+            loft_count = self.results['fabric_potential']['needs_improvement'].get('loft', 0)
+            loft_pct = loft_count / total_properties if total_properties > 0 else 0
+            national_loft = int(self.NATIONAL_HOUSING_STOCK * loft_pct)
+            loft_investment = national_loft * loft_cost / 1e9
+
+            results['measures']['loft_insulation'] = {
+                'sample_count': loft_count,
+                'sample_percent': round(loft_pct * 100, 1),
+                'national_estimate': national_loft,
+                'cost_per_home': loft_cost,
+                'total_investment_bn': round(loft_investment, 1)
+            }
+            logger.info(f"Loft insulation: {national_loft:,} homes, £{loft_investment:.1f}B")
+
+        # Wall insulation (from fabric potential)
+        wall_count = self.results.get('fabric_potential', {}).get('needs_improvement', {}).get('wall', 0)
+        wall_by_type = self.results.get('fabric_potential', {}).get('wall_insulation_by_type', {})
+
+        if wall_count > 0 or wall_by_type:
+            # Use wall type breakdown if available
+            solid_count = sum(v for k, v in wall_by_type.items()
+                            if 'solid' in k.lower() or 'stone' in k.lower())
+            cavity_count = wall_by_type.get('cavity', 0)
+            other_count = wall_count - solid_count - cavity_count if wall_count > 0 else 0
+
+            # If no breakdown, estimate 60% solid, 30% cavity based on national averages
+            if solid_count == 0 and cavity_count == 0 and wall_count > 0:
+                solid_count = int(wall_count * 0.60)
+                cavity_count = int(wall_count * 0.30)
+                other_count = wall_count - solid_count - cavity_count
+
+            wall_pct = wall_count / total_properties if total_properties > 0 else 0
+            solid_pct = solid_count / total_properties if total_properties > 0 else 0
+            cavity_pct = cavity_count / total_properties if total_properties > 0 else 0
+
+            # National estimates
+            national_solid = int(self.NATIONAL_HOUSING_STOCK * solid_pct)
+            national_cavity = int(self.NATIONAL_HOUSING_STOCK * cavity_pct)
+
+            # Average solid wall cost (80% EWI, 20% IWI)
+            avg_solid_cost = solid_ewi_cost * 0.8 + solid_iwi_cost * 0.2
+
+            solid_investment = national_solid * avg_solid_cost / 1e9
+            cavity_investment = national_cavity * cavity_cost / 1e9
+
+            results['measures']['solid_wall_insulation'] = {
+                'sample_count': solid_count,
+                'sample_percent': round(solid_pct * 100, 1),
+                'national_estimate': national_solid,
+                'cost_per_home_ewi': solid_ewi_cost,
+                'cost_per_home_iwi': solid_iwi_cost,
+                'total_investment_bn': round(solid_investment, 1)
+            }
+
+            results['measures']['cavity_wall_insulation'] = {
+                'sample_count': cavity_count,
+                'sample_percent': round(cavity_pct * 100, 1),
+                'national_estimate': national_cavity,
+                'cost_per_home': cavity_cost,
+                'total_investment_bn': round(cavity_investment, 1)
+            }
+
+            logger.info(f"Solid wall insulation: {national_solid:,} homes, £{solid_investment:.1f}B")
+            logger.info(f"Cavity wall insulation: {national_cavity:,} homes, £{cavity_investment:.1f}B")
+
+        # Glazing
+        glazing_count = self.results.get('fabric_potential', {}).get('needs_improvement', {}).get('glazing', 0)
+        if glazing_count > 0:
+            glazing_pct = glazing_count / total_properties
+            national_glazing = int(self.NATIONAL_HOUSING_STOCK * glazing_pct)
+            glazing_investment = national_glazing * glazing_cost / 1e9
+
+            results['measures']['double_glazing'] = {
+                'sample_count': glazing_count,
+                'sample_percent': round(glazing_pct * 100, 1),
+                'national_estimate': national_glazing,
+                'cost_per_home': glazing_cost,
+                'total_investment_bn': round(glazing_investment, 1)
+            }
+            logger.info(f"Double glazing: {national_glazing:,} homes, £{glazing_investment:.1f}B")
+
+        # Floor insulation
+        floor_count = self.results.get('fabric_potential', {}).get('needs_improvement', {}).get('floor', 0)
+        if floor_count > 0:
+            floor_pct = floor_count / total_properties
+            # Only ~40% of homes have suspended timber floors (applicable for insulation)
+            applicable_pct = min(floor_pct, 0.40)
+            national_floor = int(self.NATIONAL_HOUSING_STOCK * applicable_pct)
+            floor_investment = national_floor * floor_cost / 1e9
+
+            results['measures']['floor_insulation'] = {
+                'sample_count': floor_count,
+                'sample_percent': round(floor_pct * 100, 1),
+                'national_estimate': national_floor,
+                'cost_per_home': floor_cost,
+                'total_investment_bn': round(floor_investment, 1),
+                'note': 'Limited to ~40% homes with suspended timber floors'
+            }
+
+        # Total investment
+        total_investment = sum(
+            m.get('total_investment_bn', 0)
+            for m in results['measures'].values()
+        )
+        results['total_fabric_investment_bn'] = round(total_investment, 1)
+
+        # Jobs estimate (from ADE: 200k jobs by 2030, ~12 jobs per £1M invested)
+        jobs_per_bn = 12000  # 12 jobs per £1M = 12,000 per £1B
+        results['estimated_jobs'] = int(total_investment * jobs_per_bn)
+        results['ade_jobs_target_2030'] = 200000
+
+        logger.info(f"TOTAL FABRIC INVESTMENT NEEDED: £{total_investment:.0f}B")
+        logger.info(f"Estimated jobs potential: {results['estimated_jobs']:,}")
+
+        self.results['national_investment'] = results
+        return results
+
     def prioritize_improvements(
         self,
         df: pd.DataFrame,
@@ -353,17 +508,79 @@ class DemandReductionAnalyzer:
 
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write("DEMAND REDUCTION ANALYSIS RESULTS\n")
-            f.write("=" * 70 + "\n\n")
+            f.write("=" * 70 + "\n")
+            f.write("Aligned with ADE's focus on fabric-first decarbonisation\n\n")
 
-            for section, data in self.results.items():
-                f.write(f"\n{section.replace('_', ' ').upper()}\n")
+            # Fabric Potential
+            if 'fabric_potential' in self.results:
+                fp = self.results['fabric_potential']
+                f.write("\nFABRIC IMPROVEMENT NEEDS\n")
                 f.write("-" * 70 + "\n")
+                f.write(f"Total properties analyzed: {fp['total_properties']:,}\n\n")
 
-                if isinstance(data, dict):
-                    for key, value in data.items():
-                        f.write(f"{key}: {value}\n")
-                else:
-                    f.write(str(data) + "\n")
+                f.write("Properties needing improvements:\n")
+                for measure, count in fp.get('needs_improvement', {}).items():
+                    pct = count / fp['total_properties'] * 100
+                    f.write(f"  {measure.title()}: {count:,} ({pct:.1f}%)\n")
+
+                if 'wall_insulation_by_type' in fp:
+                    f.write("\nWall insulation needs by type:\n")
+                    for wall_type, count in fp['wall_insulation_by_type'].items():
+                        f.write(f"  {wall_type}: {count:,}\n")
+
+            # Savings Potential
+            if 'savings_potential' in self.results:
+                sp = self.results['savings_potential']
+                f.write("\n\nSAVINGS POTENTIAL\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"Current total demand: {sp['current_total_demand_gwh']:.1f} GWh/year\n")
+                f.write(f"Post-improvement demand: {sp['post_improvement_demand_gwh']:.1f} GWh/year\n")
+                f.write(f"Total savings: {sp['total_savings_gwh']:.1f} GWh/year ({sp.get('pct_reduction', 0):.1f}%)\n")
+                f.write(f"CO2 savings: {sp['total_co2_savings_kt']:.0f} kt/year\n")
+                f.write(f"Bill savings: £{sp['total_bill_savings_m']:.1f}M/year\n")
+
+            # Path to EPC C
+            if 'path_to_epc_c' in self.results:
+                epc = self.results['path_to_epc_c']
+                f.write("\n\nPATH TO EPC C\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"Target: EPC Band {epc['target_band']}\n")
+                f.write(f"Already compliant: {epc['already_compliant']:,} ({epc['pct_compliant']:.1f}%)\n")
+                f.write(f"Need improvement: {epc['needs_improvement']:,}\n\n")
+
+                f.write("Breakdown by improvement needed:\n")
+                breakdown = epc.get('improvement_breakdown', {})
+                f.write(f"  One band (D to C): {breakdown.get('one_band', 0):,}\n")
+                f.write(f"  Two bands (E to C): {breakdown.get('two_bands', 0):,}\n")
+                f.write(f"  Three+ bands (F/G to C): {breakdown.get('three_plus_bands', 0):,}\n\n")
+
+                f.write(f"Estimated total cost: £{epc['estimated_total_cost_bn']:.1f}B\n")
+                f.write(f"Average cost per property: £{epc['avg_cost_per_property']:,.0f}\n")
+
+            # National Investment (NEW)
+            if 'national_investment' in self.results:
+                ni = self.results['national_investment']
+                f.write("\n\nNATIONAL RETROFIT INVESTMENT CHALLENGE\n")
+                f.write("-" * 70 + "\n")
+                f.write(f"Sample analyzed: {ni['sample_size']:,} properties\n")
+                f.write(f"National housing stock (E&W): {ni['national_stock_estimate']:,}\n\n")
+
+                f.write("Investment needed by measure:\n")
+                for measure_name, measure_data in ni.get('measures', {}).items():
+                    f.write(f"\n  {measure_name.replace('_', ' ').title()}:\n")
+                    f.write(f"    In sample: {measure_data['sample_count']:,} ({measure_data['sample_percent']:.1f}%)\n")
+                    f.write(f"    National estimate: {measure_data['national_estimate']:,}\n")
+                    if 'cost_per_home_ewi' in measure_data:
+                        f.write(f"    Cost per home: £{measure_data['cost_per_home_ewi']:,} (EWI) / £{measure_data['cost_per_home_iwi']:,} (IWI)\n")
+                    elif 'cost_per_home' in measure_data:
+                        f.write(f"    Cost per home: £{measure_data['cost_per_home']:,}\n")
+                    f.write(f"    Total investment: £{measure_data['total_investment_bn']:.1f}B\n")
+
+                f.write(f"\n{'='*50}\n")
+                f.write(f"TOTAL FABRIC INVESTMENT NEEDED: £{ni['total_fabric_investment_bn']:.0f}B\n")
+                f.write(f"Estimated job creation potential: {ni['estimated_jobs']:,}\n")
+                f.write(f"ADE 2030 jobs target: {ni['ade_jobs_target_2030']:,}\n")
+                f.write(f"{'='*50}\n")
 
         logger.info(f"Results saved to: {output_path}")
 

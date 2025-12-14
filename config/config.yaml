@@ -208,8 +208,8 @@ subsidy_levels: [0, 25, 50, 75, 100]
 # Note: These are unit rates only (excluding standing charges)
 energy_prices:
   current:
-    gas: 0.0624  # Updated from 0.10 - Ofgem cap Q4 2024: 6.24p/kWh
-    electricity: 0.245  # Updated from 0.34 - Ofgem cap Q4 2024: 24.5p/kWh
+    gas: 0.0624  # Ofgem cap Q4 2024: 6.24p/kWh
+    electricity: 0.26  # Updated to Q4 2025 Ofgem cap: 26p/kWh
   projected_2030:
     gas: 0.07  # Modest increase from current (carbon pricing, reduced demand)
     electricity: 0.22  # Decrease due to renewables expansion
@@ -277,6 +277,13 @@ financial:
       name: "2030 projections"
       gas: 0.07
       electricity: 0.22
+      heat_network: 0.07
+    rebalanced:
+      name: "Price rebalancing (ADE policy scenario)"
+      # Scenario: levies shifted from electricity to gas, making heat pumps competitive
+      # Based on ADE advocacy for running cost parity by 2030
+      gas: 0.10  # Increased due to carbon levy shift
+      electricity: 0.15  # Reduced by removing policy costs
       heat_network: 0.07
 
 # Uncertainty Parameters

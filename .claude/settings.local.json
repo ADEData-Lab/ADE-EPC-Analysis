@@ -2,7 +2,25 @@
   "permissions": {
     "allow": [
       "Bash(dir /s /b)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "WebSearch",
+      "WebFetch(domain:guides.opendatacommunities.org)",
+      "Bash(dir \"C:\\Users\\PhilipNicholson\\OneDrive - ADE\\Documents\\experiments\\EPC-Reporter\\ADEEPC\\data\\raw\\all-domestic-certificates\")",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(powershell -Command \"Get-ChildItem ''C:\\Users\\PhilipNicholson\\OneDrive - ADE\\Documents\\experiments\\EPC-Reporter\\ADEEPC\\data\\raw\\all-domestic-certificates'' | Where-Object { $_Name -like ''*W06*'' } | Select-Object -First 10 Name\")",
+      "Bash(powershell -Command \"(Get-ChildItem ''C:\\Users\\PhilipNicholson\\OneDrive - ADE\\Documents\\experiments\\EPC-Reporter\\ADEEPC\\data\\raw\\all-domestic-certificates'').Count\")",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(del \"C:\\Users\\PhilipNicholson\\OneDrive - ADE\\Documents\\experiments\\EPC-Reporter\\ADEEPC\\data\\raw\\epc_england_wales_combined.parquet\")",
+      "Bash(find:*)",
+      "Bash(powershell -Command \"Remove-Item ''C:\\Users\\PhilipNicholson\\OneDrive - ADE\\Documents\\experiments\\EPC-Reporter\\ADEEPC\\data\\raw\\epc_england_wales_combined.parquet'' -Force\")",
+      "Bash(powershell:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(python run_ade_analysis.py:*)",
+      "Bash(python:*)",
+      "Bash(set:*)",
+      "Bash(PYTHONUTF8=1 python:*)"
     ],
     "deny": [],
     "ask": []
