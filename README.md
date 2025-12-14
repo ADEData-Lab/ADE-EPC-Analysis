@@ -106,8 +106,8 @@ This method automatically installs GDAL/geopandas via Conda, avoiding Windows in
 
 **Step 2**: Clone and run
 ```bash
-git clone https://github.com/pipnic1234/HeatStreetEPC.git
-cd HeatStreetEPC
+git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
+cd ADE-EPC-Analysis
 
 # Windows Command Prompt
 run-conda.bat
@@ -130,8 +130,8 @@ This single command:
 Works perfectly for EPC analysis, scenarios, charts, and reports (85% of functionality).
 
 ```bash
-git clone https://github.com/pipnic1234/HeatStreetEPC.git
-cd HeatStreetEPC
+git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
+cd ADE-EPC-Analysis
 
 # Windows Command Prompt
 run.bat
@@ -140,7 +140,7 @@ run.bat
 .\run.ps1
 
 # OR Linux/Mac
-./run.sh
+python run_analysis.py
 ```
 
 This automatically:
@@ -164,14 +164,14 @@ See [Manual Setup](#manual-setup-all-platforms) section below.
 
 **Windows (PowerShell)**:
 ```powershell
-git clone https://github.com/pipnic1234/HeatStreetEPC.git
-cd HeatStreetEPC
+git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
+cd ADE-EPC-Analysis
 ```
 
 **Linux/Mac**:
 ```bash
-git clone https://github.com/pipnic1234/HeatStreetEPC.git
-cd HeatStreetEPC
+git clone https://github.com/pipnic1234/ADE-EPC-Analysis.git
+cd ADE-EPC-Analysis
 ```
 
 #### Step 2: Create virtual environment
