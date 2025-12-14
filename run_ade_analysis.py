@@ -14,6 +14,7 @@ Usage:
 
 import sys
 from pathlib import Path
+import pandas as pd
 from loguru import logger
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -23,7 +24,14 @@ import time
 # Add src to path
 sys.path.append(str(Path(__file__).parent))
 
-from config.config import load_config, ensure_directories, DATA_RAW_DIR, DATA_PROCESSED_DIR, DATA_OUTPUTS_DIR
+from config.config import (
+    load_config,
+    ensure_directories,
+    DATA_RAW_DIR,
+    DATA_PROCESSED_DIR,
+    DATA_OUTPUTS_DIR,
+    DATA_SUPPLEMENTARY_DIR,
+)
 from src.acquisition.epc_bulk_downloader import EPCBulkDownloader
 from src.cleaning.data_validator import EPCDataValidator
 from src.utils.geography_lookup import GeographyLookup
@@ -33,6 +41,8 @@ from src.analysis.heat_network_potential import HeatNetworkPotentialAnalyzer
 from src.analysis.demand_reduction_analysis import DemandReductionAnalyzer
 from src.analysis.consumer_impact_analysis import ConsumerImpactAnalyzer
 from src.analysis.policy_scenarios import PolicyScenarioAnalyzer
+from src.spatial.postcode_geocoder import PostcodeGeocoder
+from src.spatial.heat_network_zone_proximity import HeatNetworkZoneProximityAnalyzer
 
 console = Console()
 
@@ -208,6 +218,80 @@ def phase_3_geographic_enrichment(df):
     console.print(f"[green]✓[/green] Enriched data saved: {output_file}")
 
     return df_enriched
+
+
+def phase_3b_heat_network_proximity(df, sample_size: int = 50000):
+    """
+    Optional: analyze proximity to DESNZ heat network planning database.
+
+    Uses postcodes.io for geocoding (cached) and assigns proximity tiers.
+    """
+    console.print()
+    console.print(Panel("[bold]Phase 3b: Heat Network Proximity[/bold]", border_style="blue"))
+    console.print()
+
+    if 'POSTCODE' not in df.columns:
+        console.print("[yellow]⚠ POSTCODE column not found - skipping heat network proximity[/yellow]")
+        return None, None
+
+    # Sample to keep runtime manageable
+    if sample_size and len(df) > sample_size:
+        console.print(f"[yellow]Sampling {sample_size:,} properties for proximity analysis out of {len(df):,}[/yellow]")
+        df_sample = df.sample(n=sample_size, random_state=42)
+    else:
+        df_sample = df
+
+    cache_file = DATA_OUTPUTS_DIR / "geocoding_cache.csv"
+    geocoder = PostcodeGeocoder(cache_file=cache_file)
+    properties_gdf = geocoder.geocode_dataframe(df_sample, postcode_column='POSTCODE', batch_mode=True)
+
+    if properties_gdf is None or properties_gdf.empty:
+        console.print("[red]No properties could be geocoded - skipping heat network proximity[/red]")
+        return None, None
+
+    # Project to British National Grid for distance calculations
+    properties_gdf = properties_gdf.to_crs("EPSG:27700")
+
+    analyzer = HeatNetworkZoneProximityAnalyzer()
+    analyzer.load_heat_network_data()
+    properties_gdf = analyzer.calculate_proximity(properties_gdf)
+
+    # Save property-level sample output
+    output_df = properties_gdf.copy()
+    latlon = output_df.geometry.to_crs("EPSG:4326")
+    output_df['LATITUDE'] = latlon.y
+    output_df['LONGITUDE'] = latlon.x
+    output_df = output_df.drop(columns=['geometry'])
+    properties_output = DATA_OUTPUTS_DIR / "epc_heat_network_proximity_sample.csv"
+    output_df.to_csv(properties_output, index=False)
+    console.print(f"[green]Saved property-level proximity sample: {properties_output.name} ({len(output_df):,} records)[/green]")
+
+    # Constituency summary (if codes available)
+    constituency_output = None
+    if 'CONSTITUENCY' in properties_gdf.columns:
+        lookup_file = DATA_SUPPLEMENTARY_DIR / "constituency_lookup.csv"
+        if lookup_file.exists():
+            lookup_df = pd.read_csv(lookup_file)
+            properties_gdf = properties_gdf.merge(lookup_df, how='left', on='CONSTITUENCY')
+
+        constituency_summary = analyzer.analyze_by_constituency(properties_gdf, constituency_col='CONSTITUENCY')
+        if len(constituency_summary) > 0:
+            constituency_output = DATA_OUTPUTS_DIR / "constituency_heat_network_proximity.csv"
+            constituency_summary.to_csv(constituency_output, index=False)
+            console.print(f"[green]Saved constituency proximity summary: {constituency_output.name}[/green]")
+
+    analyzer.save_results()
+
+    proximity_results = {
+        "tier_distribution": analyzer.results.get("tier_distribution", {}),
+        "properties_output": properties_output,
+        "constituency_output": constituency_output,
+        "sample_size": len(output_df),
+    }
+
+    console.print(f"[green]Heat network proximity analysis complete on {len(output_df):,} properties[/green]")
+
+    return properties_gdf, proximity_results
 
 
 def phase_4_policy_analysis(df, df_hp=None):
@@ -468,6 +552,21 @@ def phase_5_reporting(results):
                 f.write(f"Total heat demand: {hn.get('total_viable_heat_demand_gwh', 0):.1f} GWh\n")
                 f.write(f"Connection cost: £{hn.get('total_connection_cost_bn', 0):.2f}B\n")
 
+        # Heat network proximity (sampled)
+        if 'heat_network_proximity' in results and results['heat_network_proximity']:
+            prox = results['heat_network_proximity']
+            f.write("\n\n3b. HEAT NETWORK PROXIMITY (DESNZ PLANNING DB)\n")
+            f.write("-" * 70 + "\n")
+            f.write(f"Sample analyzed: {prox.get('sample_size', 0):,} properties\n")
+            if prox.get('tier_distribution'):
+                f.write("Tier distribution (sample):\n")
+                for tier, count in prox['tier_distribution'].items():
+                    f.write(f"  {tier}: {count:,}\n")
+            if prox.get('properties_output'):
+                f.write(f"Property-level output: {prox['properties_output']}\n")
+            if prox.get('constituency_output'):
+                f.write(f"Constituency summary: {prox['constituency_output']}\n")
+
         # Demand reduction summary
         if 'demand_reduction' in results and results['demand_reduction']:
             f.write("\n\n4. DEMAND REDUCTION\n")
@@ -587,8 +686,13 @@ def main():
         # Phase 3: Geographic Enrichment
         df_enriched = phase_3_geographic_enrichment(df_validated)
 
+        # Phase 3b: Heat Network Proximity (sampled)
+        _, proximity_results = phase_3b_heat_network_proximity(df_enriched)
+
         # Phase 4: Policy Analysis
         results = phase_4_policy_analysis(df_enriched)
+        if proximity_results:
+            results['heat_network_proximity'] = proximity_results
 
         # Phase 4b: Constituency-Level Analysis
         constituency_outputs = phase_4b_constituency_analysis(df_enriched, results)
