@@ -98,7 +98,8 @@ After running the analysis, check these locations:
 ls data/processed/
 
 # Analysis results
-cat data/outputs/archetype_analysis_results.txt
+cat data/outputs/heat_network_potential_results.txt
+cat data/outputs/demand_reduction_results.txt
 
 # Visualizations
 ls data/outputs/figures/
@@ -119,13 +120,12 @@ xdg-open data/outputs/maps/heat_network_tiers.html  # Linux
 
 | File | What It Shows |
 |------|---------------|
-| `epc_london_validated.csv` | Your cleaned dataset |
-| `archetype_analysis_results.txt` | Summary statistics of the housing stock |
-| `scenario_modeling_results.txt` | Cost-benefit analysis of different pathways |
+| `epc_england_wales_validated.parquet` | Cleaned EPC dataset (England & Wales) |
+| `heat_network_potential_results.txt` | Heat density tiers and connection estimates |
+| `demand_reduction_results.txt` | Fabric needs, EPC-C pathway metrics, and savings |
 | `pathway_suitability_by_tier.csv` | Which properties suit heat networks vs heat pumps |
 | `epc_band_distribution.png` | Visual of current EPC ratings |
-| `scenario_comparison.png` | Visual comparison of decarbonization options |
-| `heat_network_tiers.html` | Interactive map of your properties |
+| `heat_network_tiers.html` | Interactive map of national heat network tiers |
 
 ## Customizing Your Analysis
 
@@ -149,8 +149,7 @@ subsidy_levels: [0, 20, 40, 60, 80, 100]
 
 Then re-run:
 ```bash
-python main.py --phase model
-python main.py --phase report
+python run_ade_analysis.py
 ```
 
 ## Common Issues
@@ -214,27 +213,13 @@ Then run analysis on sample to verify everything works.
 Here's a typical workflow:
 
 ```bash
-# Day 1: Get data and validate
-python main.py --phase acquire --download
-# ... download EPC data per instructions ...
-python main.py --phase acquire
-python main.py --phase clean
+# Run the national pipeline end to end
+python run_ade_analysis.py
 
-# Day 2: Initial analysis
-python main.py --phase analyze
-# Review: data/outputs/archetype_analysis_results.txt
-
-# Day 3: Scenario modeling
-python main.py --phase model
-# Review: data/outputs/scenario_modeling_results.txt
-
-# Day 4: Spatial analysis (if you have heat map data)
-python main.py --phase spatial
-# Review: data/outputs/maps/heat_network_tiers.html
-
-# Day 5: Generate reports
-python main.py --phase report
-# Review: data/outputs/reports/executive_summary.txt
+# Review key outputs
+cat data/outputs/heat_network_potential_results.txt
+cat data/outputs/demand_reduction_results.txt
+cat data/outputs/reports/executive_summary.txt
 ```
 
 ## Success Checklist
@@ -243,7 +228,7 @@ python main.py --phase report
 - [ ] Virtual environment created and activated
 - [ ] Dependencies installed (`pip install -r requirements.txt`)
 - [ ] EPC data obtained and placed in `data/raw/`
-- [ ] First pipeline run completed (`python main.py --phase all`)
+- [ ] First pipeline run completed (`python run_ade_analysis.py`)
 - [ ] Results reviewed in `data/outputs/`
 - [ ] Configuration customized for your needs
 

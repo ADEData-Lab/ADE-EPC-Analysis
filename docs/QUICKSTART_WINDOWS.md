@@ -159,11 +159,9 @@ explorer data\outputs\maps
 ### View Text Reports
 
 ```powershell
-# View archetype analysis
-type data\outputs\archetype_analysis_results.txt
-
-# View scenario results
-type data\outputs\scenario_modeling_results.txt
+# View key summaries
+type data\outputs\heat_network_potential_results.txt
+type data\outputs\demand_reduction_results.txt
 
 # View executive summary
 type data\outputs\reports\executive_summary.txt

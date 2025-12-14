@@ -1,6 +1,8 @@
-# Interactive Analysis Mode
+# Interactive Analysis Mode (Legacy)
 
-Run the complete EPC analysis from start to finish in one window with interactive prompts.
+> **Note:** The interactive prompt-driven workflow was part of the London-centric Heat Street project and is no longer maintained.
+> The national ADE pipeline runs directly via `python run_ade_analysis.py`. The steps below are retained only for historical
+> reference alongside the archived code in `legacy/heat_street/`.
 
 ## Quick Start
 
