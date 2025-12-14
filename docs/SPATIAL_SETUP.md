@@ -73,7 +73,7 @@ python -c "from osgeo import gdal; print('✓ GDAL installed successfully!')"
 
 ```bash
 # From the Anaconda Prompt (with heatstreet environment activated)
-python run_analysis.py
+python run_ade_analysis.py
 ```
 
 ## 🔧 **Alternative: Pre-built Wheels Method**
@@ -319,7 +319,7 @@ conda create -n heatstreet python=3.11 -y
 conda activate heatstreet
 conda install -c conda-forge geopandas -y
 pip install -r requirements.txt
-python run_analysis.py
+python run_ade_analysis.py
 ```
 
 Done! 🎉

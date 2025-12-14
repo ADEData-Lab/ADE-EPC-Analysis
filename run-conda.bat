@@ -119,7 +119,7 @@ echo Starting Interactive Analysis
 echo ========================================
 echo.
 
-python run_analysis.py
+python run_ade_analysis.py
 
 if %errorlevel% equ 0 (
     echo.
@@ -140,7 +140,7 @@ echo.
 echo ========================================
 echo To use this environment again:
 echo   conda activate heatstreet
-echo   python run_analysis.py
+echo   python run_ade_analysis.py
 echo ========================================
 echo.
 pause

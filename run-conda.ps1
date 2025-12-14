@@ -121,7 +121,7 @@ Write-Host "Starting Interactive Analysis" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-python run_analysis.py
+python run_ade_analysis.py
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host ""
@@ -142,7 +142,7 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "To use this environment again:" -ForegroundColor Cyan
 Write-Host "  conda activate heatstreet" -ForegroundColor White
-Write-Host "  python run_analysis.py" -ForegroundColor White
+Write-Host "  python run_ade_analysis.py" -ForegroundColor White
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 Read-Host "Press Enter to exit"
