@@ -61,15 +61,12 @@ python run_ade_analysis.py
 
 The script will detect the extracted CSV files and process them.
 
-## Option 3: Use API for Specific Regions (Slower but Automated)
+## Option 3: Legacy API workflow (archived)
 
-For smaller datasets, use the existing API downloader:
-
-```bash
-python src/acquisition/epc_api_downloader.py
-```
-
-This will download via API (slower but works for specific regions/local authorities).
+The previous London API downloader has been retired and archived under
+`src/legacy/acquisition`. It is preserved for reference only and should not be
+used for current runs. Use the bulk downloader and national-scale data sources
+outlined above instead.
 
 ## Option 4: Quick Test with London Data
 

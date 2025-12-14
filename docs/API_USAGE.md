@@ -1,6 +1,8 @@
 # EPC API Usage Guide
 
-This guide explains how to use the EPC API downloader to automatically fetch data from the UK EPC Register.
+This guide explains how to use the (now retired) EPC API downloader to automatically
+fetch data from the UK EPC Register. The downloader has been archived under
+`src/legacy/acquisition` and should only be used for historical reference.
 
 ## Setup
 
@@ -46,10 +48,10 @@ export EPC_API_KEY="your_api_key_here"
 
 ### Quick Start
 
-Download all London EPC data for Edwardian terraced houses:
+Download all London EPC data for Edwardian terraced houses (legacy example only):
 
 ```python
-from src.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
 
 # Initialize downloader (reads credentials from .env)
 downloader = EPCAPIDownloader()
@@ -67,10 +69,10 @@ df_filtered = downloader.apply_edwardian_filters(df)
 downloader.save_data(df_filtered, "epc_london_edwardian.csv")
 ```
 
-### Download a Single Borough
+### Download a Single Borough (legacy)
 
 ```python
-from src.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
 
 downloader = EPCAPIDownloader()
 
@@ -101,7 +103,7 @@ Run the downloader directly:
 
 ```bash
 # Activate virtual environment first
-python src/acquisition/epc_api_downloader.py
+python src/legacy/acquisition/epc_api_downloader.py
 ```
 
 This will:
@@ -251,7 +253,7 @@ The API downloader integrates with the main pipeline:
 
 ```bash
 # Option 1: Use API downloader
-python src/acquisition/epc_api_downloader.py
+python src/legacy/acquisition/epc_api_downloader.py
 
 # Then continue with the pipeline
 python main.py --phase clean
@@ -261,7 +263,7 @@ python main.py --phase analyze
 Or integrate directly:
 
 ```python
-from src.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
 
 # Download data via API
 downloader = EPCAPIDownloader()
@@ -289,7 +291,7 @@ If you accidentally commit credentials:
 Complete example downloading and analyzing Camden EPCs:
 
 ```python
-from src.acquisition.epc_api_downloader import EPCAPIDownloader
+from src.legacy.acquisition.epc_api_downloader import EPCAPIDownloader
 import pandas as pd
 
 # Initialize

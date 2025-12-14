@@ -12,6 +12,18 @@ Author: Heat Street EPC Analysis
 Date: 2025-12-03
 """
 
+from textwrap import dedent
+
+raise RuntimeError(
+    dedent(
+        """
+        The London GIS downloader has been archived under src/legacy/acquisition.
+        It is retained for historical reference and is not part of the maintained
+        workflow. Use current spatial data guidance in docs/GIS_DATA.md instead.
+        """
+    )
+)
+
 import os
 import subprocess
 import zipfile

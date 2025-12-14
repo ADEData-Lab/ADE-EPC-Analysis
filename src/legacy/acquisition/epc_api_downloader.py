@@ -5,6 +5,18 @@ Downloads EPC data directly from the UK EPC Register API.
 Handles data for London boroughs with filters for Edwardian terraced housing.
 """
 
+from textwrap import dedent
+
+raise RuntimeError(
+    dedent(
+        """
+        This EPC API downloader has been archived under src/legacy/acquisition
+        and is no longer maintained. The national workflow does not rely on EPC
+        API credentials; please use the supported bulk data ingestion pipeline.
+        """
+    )
+)
+
 import os
 import base64
 import urllib.request

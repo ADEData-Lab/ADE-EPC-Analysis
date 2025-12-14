@@ -79,16 +79,17 @@ data/external/GIS_All_Data/Networks/
 - Each shapefile comes with multiple files (.shp, .shx, .dbf, .prj) - this is normal
 - Make sure you extracted the entire folder, not just individual files
 
-## Alternative: Download via Python
+## Alternative: Download via Python (legacy)
 
-If you have the environment set up, you can also download via Python:
+If you need the historical London GIS dataset for reference, you can download it
+via the archived helper:
 
 ```bash
 # Activate environment first
 conda activate heatstreet
 
 # Run the downloader
-python -c "from src.acquisition.london_gis_downloader import LondonGISDownloader; LondonGISDownloader().download_and_prepare()"
+python -c "from src.legacy.acquisition.london_gis_downloader import LondonGISDownloader; LondonGISDownloader().download_and_prepare()"
 ```
 
 ---

@@ -1,6 +1,9 @@
 # London GIS Data Integration
 
-The Heat Street EPC Analysis can automatically download and use GIS data from London Datastore to enhance spatial analysis capabilities.
+The Heat Street EPC Analysis previously downloaded GIS data from London Datastore
+to enhance spatial analysis capabilities. That London-only workflow has been
+retired; the downloader lives under `src/legacy/acquisition` for reference and
+is no longer part of the maintained pipeline.
 
 ## What's Included
 
@@ -94,7 +97,7 @@ This analysis can optionally use GIS data from London Datastore for:
 Use the downloader directly in your code:
 
 ```python
-from src.acquisition.london_gis_downloader import LondonGISDownloader
+from src.legacy.acquisition.london_gis_downloader import LondonGISDownloader
 
 # Initialize downloader
 downloader = LondonGISDownloader()

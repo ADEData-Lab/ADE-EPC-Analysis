@@ -5,6 +5,18 @@ Downloads and extracts EPC data from the official UK EPC Register.
 Handles data for London boroughs with filters for Edwardian terraced housing.
 """
 
+from textwrap import dedent
+
+raise RuntimeError(
+    dedent(
+        """
+        This London-focused EPC downloader is archived under src/legacy/acquisition
+        and kept for historical reference only. Please use the maintained bulk
+        ingestion workflow for current analyses.
+        """
+    )
+)
+
 import os
 import requests
 import pandas as pd

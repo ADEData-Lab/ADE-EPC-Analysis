@@ -40,24 +40,6 @@ def load_config(config_file: str = "config.yaml") -> Dict[str, Any]:
     return config
 
 
-def get_london_boroughs() -> list:
-    """Return configured borough list if present (legacy helper)."""
-
-    config = load_config()
-    geography = config.get('geography', {})
-
-    # Older versions of the project relied on an explicit London borough list.
-    # The national-scale configuration does not require this, so default to an
-    # empty list when the field is absent to keep legacy callers stable.
-    return geography.get('boroughs', [])
-
-
-def get_property_filters() -> Dict[str, Any]:
-    """Get property filter criteria from config."""
-    config = load_config()
-    return config['property_filters']
-
-
 def get_data_quality_thresholds() -> Dict[str, Any]:
     """Get data quality thresholds from config."""
     config = load_config()

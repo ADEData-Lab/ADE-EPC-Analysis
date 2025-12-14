@@ -40,17 +40,6 @@ geography:
   # Optional: specific local authorities (null = all)
   local_authorities_filter: null
 
-# Property Filters
-property_filters:
-  # Include all domestic properties
-  include_all_domestic: true
-
-  # Optional: exclude specific property types if needed
-  exclude_property_types: []  # e.g., ["Flat"] if focusing on houses only
-
-  # Certificate recency (years from present)
-  certificate_recency_years: 10
-
 # Data Quality Thresholds
 # See AUTHORITATIVE_SOURCES.md Section 9: EPC Data Validation Thresholds
 data_quality:
