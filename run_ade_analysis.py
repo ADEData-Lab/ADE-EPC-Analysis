@@ -19,6 +19,7 @@ from loguru import logger
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.panel import Panel
+from rich.prompt import Confirm
 import time
 
 # Add src to path
@@ -45,6 +46,37 @@ from src.spatial.postcode_geocoder import PostcodeGeocoder
 from src.spatial.heat_network_zone_proximity import HeatNetworkZoneProximityAnalyzer
 
 console = Console()
+
+
+def load_existing_parquet(file_path: Path, description: str):
+    """Prompt to reuse an existing parquet file and return its contents if confirmed."""
+
+    if not file_path.exists():
+        return None
+
+    file_size_gb = file_path.stat().st_size / (1024**3)
+    console.print(f"[green]✓[/green] Existing {description} found: {file_path.name}")
+    console.print(f"  File size: {file_size_gb:.2f} GB")
+
+    try:
+        import pyarrow.parquet as pq
+        metadata = pq.read_metadata(file_path)
+        console.print(f"  Records: {metadata.num_rows:,}")
+    except Exception as e:
+        console.print(f"[yellow]⚠[/yellow] Could not read {description} metadata: {e}")
+
+    use_existing = Confirm.ask(f"Use existing {description}?", default=True)
+
+    if use_existing:
+        try:
+            df = pd.read_parquet(file_path)
+            console.print(f"[green]✓[/green] Using existing {description}")
+            return df
+        except Exception as e:
+            console.print(f"[yellow]⚠[/yellow] Failed to load existing {description}: {e}")
+            console.print("[yellow]Recomputing...[/yellow]")
+
+    return None
 
 
 def print_header():
@@ -90,7 +122,6 @@ def phase_1_data_acquisition():
             console.print(f"  Columns: {num_cols}")
             console.print()
 
-            from rich.prompt import Confirm
             use_existing = Confirm.ask("Use existing data file?", default=True)
 
             if use_existing:
@@ -153,7 +184,6 @@ def phase_2_data_validation(data_path: Path):
         except Exception as e:
             console.print(f"[yellow]⚠[/yellow] Could not read file metadata: {e}")
 
-        from rich.prompt import Confirm
         use_existing = Confirm.ask("Use existing validated file?", default=True)
 
         if use_existing:
@@ -206,13 +236,18 @@ def phase_3_geographic_enrichment(df):
 
     console.print("[cyan]Adding geographic hierarchies (national/regional/LA/constituency)...[/cyan]")
 
+    output_file = DATA_PROCESSED_DIR / "epc_england_wales_enriched.parquet"
+
+    existing_df = load_existing_parquet(output_file, "geographically enriched dataset")
+    if existing_df is not None:
+        return existing_df
+
     geo = GeographyLookup()
     df_enriched = geo.enrich_epc_data(df)
 
     console.print(f"[green]✓[/green] Geographic enrichment complete")
 
     # Save enriched data
-    output_file = DATA_PROCESSED_DIR / "epc_england_wales_enriched.parquet"
     df_enriched.to_parquet(output_file, index=False)
 
     console.print(f"[green]✓[/green] Enriched data saved: {output_file}")
@@ -229,6 +264,46 @@ def phase_3b_heat_network_proximity(df, sample_size: int | None = None):
     console.print()
     console.print(Panel("[bold]Phase 3b: Heat Network Proximity[/bold]", border_style="blue"))
     console.print()
+
+    properties_output = DATA_OUTPUTS_DIR / "epc_heat_network_proximity_sample.csv"
+    constituency_output = DATA_OUTPUTS_DIR / "constituency_heat_network_proximity.csv"
+    results_output = DATA_OUTPUTS_DIR / "heat_network_zone_proximity_results.txt"
+
+    existing_outputs = [
+        path for path in [properties_output, constituency_output, results_output]
+        if path.exists()
+    ]
+
+    if existing_outputs:
+        console.print("[green]✓[/green] Existing heat network proximity outputs detected:")
+        for path in existing_outputs:
+            size_mb = path.stat().st_size / (1024**2)
+            console.print(f"  • {path.name} ({size_mb:.1f} MB)")
+
+        if Confirm.ask("Use existing heat network proximity outputs?", default=True):
+            try:
+                if properties_output.exists():
+                    sample_df = pd.read_csv(properties_output)
+                else:
+                    sample_df = pd.DataFrame()
+
+                tier_distribution = {}
+                if not sample_df.empty and 'hn_zone_proximity_tier' in sample_df.columns:
+                    tier_distribution = sample_df['hn_zone_proximity_tier'].value_counts().to_dict()
+
+                proximity_results = {
+                    "tier_distribution": tier_distribution,
+                    "properties_output": properties_output if properties_output.exists() else None,
+                    "constituency_output": constituency_output if constituency_output.exists() else None,
+                    "sample_size": len(sample_df)
+                }
+
+                console.print("[green]✓[/green] Using existing heat network proximity outputs")
+                return None, proximity_results
+
+            except Exception as e:
+                console.print(f"[yellow]⚠[/yellow] Could not load existing proximity outputs: {e}")
+                console.print("[yellow]Recomputing heat network proximity...[/yellow]")
 
     if 'POSTCODE' not in df.columns:
         console.print("[yellow]⚠ POSTCODE column not found - skipping heat network proximity[/yellow]")
@@ -264,7 +339,6 @@ def phase_3b_heat_network_proximity(df, sample_size: int | None = None):
     output_df['LATITUDE'] = latlon.y
     output_df['LONGITUDE'] = latlon.x
     output_df = output_df.drop(columns=['geometry'])
-    properties_output = DATA_OUTPUTS_DIR / "epc_heat_network_proximity_sample.csv"
     output_df.to_csv(properties_output, index=False)
     console.print(f"[green]Saved property-level proximity sample: {properties_output.name} ({len(output_df):,} records)[/green]")
 
@@ -377,6 +451,26 @@ def phase_4b_constituency_analysis(df, results):
     console.print()
     console.print(Panel("[bold]Phase 4b: Constituency-Level Analysis[/bold]", border_style="blue"))
     console.print()
+
+    expected_outputs = {
+        'fuel_mix': DATA_OUTPUTS_DIR / "constituency_fuel_mix.csv",
+        'heat_pump': DATA_OUTPUTS_DIR / "constituency_heat_pump_potential.csv",
+        'heat_network': DATA_OUTPUTS_DIR / "constituency_heat_network_potential.csv",
+        'epc_distribution': DATA_OUTPUTS_DIR / "constituency_epc_distribution.csv",
+        'consumer_impact': DATA_OUTPUTS_DIR / "constituency_consumer_impact.csv",
+        'summary': DATA_OUTPUTS_DIR / "constituency_summary.csv",
+    }
+
+    existing_outputs = {name: path for name, path in expected_outputs.items() if path.exists()}
+
+    if existing_outputs:
+        console.print("[green]✓[/green] Existing constituency-level outputs detected:")
+        for name, path in existing_outputs.items():
+            console.print(f"  • {name.replace('_', ' ').title()}: {path.name}")
+
+        if Confirm.ask("Use existing constituency outputs and skip regeneration?", default=True):
+            console.print("[green]✓[/green] Using existing constituency outputs")
+            return existing_outputs
 
     import pandas as pd
 
@@ -512,6 +606,16 @@ def phase_5_reporting(results):
 
     # Create summary report
     report_path = DATA_OUTPUTS_DIR / "ade_policy_analysis_summary.txt"
+
+    if report_path.exists():
+        modified = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(report_path.stat().st_mtime))
+        size_mb = report_path.stat().st_size / (1024**2)
+        console.print(f"[green]✓[/green] Existing summary report found: {report_path.name} ({size_mb:.1f} MB, last updated {modified})")
+        if Confirm.ask("Use existing summary report and skip regeneration?", default=True):
+            console.print("[green]✓[/green] Using existing summary report")
+            console.print()
+            console.print(f"[cyan]📁 All outputs saved to:[/cyan] {DATA_OUTPUTS_DIR}")
+            return report_path
 
     with open(report_path, 'w') as f:
         f.write("ADE EPC POLICY ANALYSIS - SUMMARY REPORT\n")
