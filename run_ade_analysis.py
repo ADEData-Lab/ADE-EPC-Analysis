@@ -81,13 +81,22 @@ def load_existing_parquet(file_path: Path, description: str):
     return None
 
 
-def iter_parquet_batches(file_path: Path, batch_size: int):
+def iter_parquet_batches(file_path: Path, batch_size: int, columns: list[str] | None = None):
     """Yield DataFrame batches from a parquet file."""
     import pyarrow.parquet as pq
 
     parquet_file = pq.ParquetFile(file_path)
-    for batch in parquet_file.iter_batches(batch_size=batch_size):
+    for batch in parquet_file.iter_batches(batch_size=batch_size, columns=columns):
         yield batch.to_pandas()
+
+
+def select_available_columns(file_path: Path, desired_columns: list[str]) -> list[str]:
+    """Return available columns from parquet file that match desired columns."""
+    import pyarrow.parquet as pq
+
+    parquet_file = pq.ParquetFile(file_path)
+    available = set(parquet_file.schema.names)
+    return [col for col in desired_columns if col in available]
 
 
 def select_fuel_column(df: pd.DataFrame) -> str | None:
@@ -164,7 +173,7 @@ def update_reservoir(sample: list[float], total_seen: int, values: pd.Series, ma
     return total_seen
 
 
-def run_chunked_pipeline(validated_path: Path, batch_size: int = 250000):
+def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
     """Run phases 3-5 using chunked processing to reduce memory use."""
     console.print()
     console.print("[cyan]Running chunked processing for phases 3-5...[/cyan]")
@@ -236,7 +245,34 @@ def run_chunked_pipeline(validated_path: Path, batch_size: int = 250000):
     import pyarrow.parquet as pq
     writer = None
 
-    for df in iter_parquet_batches(source_path, batch_size=batch_size):
+    desired_columns = [
+        'POSTCODE',
+        'LOCAL_AUTHORITY',
+        'LOCAL_AUTHORITY_LABEL',
+        'local_authority_name',
+        'region_name',
+        'constituency_name',
+        'MAIN_FUEL',
+        'MAINHEAT_DESCRIPTION',
+        'MAIN_HEATING_FUEL',
+        'CURRENT_ENERGY_RATING',
+        'ENERGY_CONSUMPTION_CURRENT',
+        'TOTAL_FLOOR_AREA',
+        'ROOF_DESCRIPTION',
+        'wall_type',
+        'wall_insulated',
+        'WINDOWS_DESCRIPTION',
+        'FLOOR_DESCRIPTION',
+        'CURRENT_ENERGY_EFFICIENCY',
+    ]
+    selected_columns = select_available_columns(source_path, desired_columns)
+    if not selected_columns:
+        raise ValueError(f"No required columns found in {source_path}")
+
+    console.print(f"[cyan]Chunk size:[/cyan] {batch_size:,} rows")
+    console.print(f"[cyan]Columns loaded:[/cyan] {len(selected_columns)}")
+
+    for df in iter_parquet_batches(source_path, batch_size=batch_size, columns=selected_columns):
         if needs_enrichment:
             df = geo.enrich_epc_data(df)
 
