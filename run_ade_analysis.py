@@ -13,6 +13,8 @@ Usage:
 """
 
 import sys
+import random
+from collections import Counter, defaultdict
 from pathlib import Path
 import pandas as pd
 from loguru import logger
@@ -77,6 +79,827 @@ def load_existing_parquet(file_path: Path, description: str):
             console.print("[yellow]Recomputing...[/yellow]")
 
     return None
+
+
+def iter_parquet_batches(file_path: Path, batch_size: int, columns: list[str] | None = None):
+    """Yield DataFrame batches from a parquet file."""
+    import pyarrow.parquet as pq
+
+    parquet_file = pq.ParquetFile(file_path)
+    for batch in parquet_file.iter_batches(batch_size=batch_size, columns=columns):
+        yield batch.to_pandas()
+
+
+def select_available_columns(file_path: Path, desired_columns: list[str]) -> list[str]:
+    """Return available columns from parquet file that match desired columns."""
+    import pyarrow.parquet as pq
+
+    parquet_file = pq.ParquetFile(file_path)
+    available = set(parquet_file.schema.names)
+    return [col for col in desired_columns if col in available]
+
+
+def select_fuel_column(df: pd.DataFrame) -> str | None:
+    """Select the most appropriate fuel column."""
+    for col in ['MAIN_FUEL', 'MAINHEAT_DESCRIPTION', 'MAIN_HEATING_FUEL']:
+        if col in df.columns:
+            return col
+    return None
+
+
+def apply_heat_pump_suitability(df: pd.DataFrame, policy_config: dict) -> pd.DataFrame:
+    """Apply heat pump suitability tiers and fabric cost estimates in-place."""
+    max_heat_demand = policy_config.get('max_heat_demand_kwh_m2', 150)
+
+    df['hp_suitability_tier'] = 5
+    df['hp_barriers'] = ''
+    df['hp_fabric_cost_estimate'] = 0
+
+    tier_1_mask = (
+        (df['CURRENT_ENERGY_RATING'].isin(['A', 'B', 'C'])) &
+        (df.get('ENERGY_CONSUMPTION_CURRENT', 999) < max_heat_demand)
+    )
+    df.loc[tier_1_mask, 'hp_suitability_tier'] = 1
+    df.loc[tier_1_mask, 'hp_barriers'] = 'None - ready for installation'
+
+    tier_2_mask = (
+        (df['CURRENT_ENERGY_RATING'] == 'D') &
+        (~tier_1_mask)
+    )
+    df.loc[tier_2_mask, 'hp_suitability_tier'] = 2
+    df.loc[tier_2_mask, 'hp_barriers'] = 'Minor - loft insulation top-up recommended'
+    df.loc[tier_2_mask, 'hp_fabric_cost_estimate'] = 1200
+
+    tier_3_mask = (
+        (df['CURRENT_ENERGY_RATING'] == 'E') &
+        (~tier_1_mask) &
+        (~tier_2_mask)
+    )
+    df.loc[tier_3_mask, 'hp_suitability_tier'] = 3
+    df.loc[tier_3_mask, 'hp_barriers'] = 'Moderate - wall and loft insulation needed'
+    df.loc[tier_3_mask, 'hp_fabric_cost_estimate'] = 4000
+
+    tier_4_mask = (
+        (df['CURRENT_ENERGY_RATING'] == 'F') &
+        (~tier_1_mask) &
+        (~tier_2_mask) &
+        (~tier_3_mask)
+    )
+    df.loc[tier_4_mask, 'hp_suitability_tier'] = 4
+    df.loc[tier_4_mask, 'hp_barriers'] = 'Major - solid wall insulation required'
+    df.loc[tier_4_mask, 'hp_fabric_cost_estimate'] = 12000
+
+    tier_5_mask = (
+        (df['CURRENT_ENERGY_RATING'] == 'G') |
+        (df.get('ENERGY_CONSUMPTION_CURRENT', 0) > max_heat_demand * 1.5)
+    )
+    df.loc[tier_5_mask, 'hp_suitability_tier'] = 5
+    df.loc[tier_5_mask, 'hp_barriers'] = 'Challenging - extensive fabric upgrade needed'
+    df.loc[tier_5_mask, 'hp_fabric_cost_estimate'] = 15000
+
+    return df
+
+
+def update_reservoir(sample: list[float], total_seen: int, values: pd.Series, max_size: int, rng: random.Random) -> int:
+    """Update reservoir sample with new values."""
+    for value in values.dropna().tolist():
+        total_seen += 1
+        if len(sample) < max_size:
+            sample.append(value)
+        else:
+            idx = rng.randint(1, total_seen)
+            if idx <= max_size:
+                sample[idx - 1] = value
+    return total_seen
+
+
+def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
+    """Run phases 3-5 using chunked processing to reduce memory use."""
+    console.print()
+    console.print("[cyan]Running chunked processing for phases 3-5...[/cyan]")
+
+    output_file = DATA_PROCESSED_DIR / "epc_england_wales_enriched.parquet"
+    source_path = validated_path
+    needs_enrichment = True
+
+    if output_file.exists():
+        console.print(f"[green]✓[/green] Existing enriched dataset found: {output_file.name}")
+        if Confirm.ask("Use existing enriched dataset for chunked analysis?", default=True):
+            source_path = output_file
+            needs_enrichment = False
+
+    geo = GeographyLookup()
+    fuel_analyzer = HeatingFuelAnalyzer()
+    hp_analyzer = HeatPumpPotentialAnalyzer()
+    hn_analyzer = HeatNetworkPotentialAnalyzer()
+    dr_analyzer = DemandReductionAnalyzer()
+    ci_analyzer = ConsumerImpactAnalyzer()
+    ps_analyzer = PolicyScenarioAnalyzer()
+
+    rng = random.Random(42)
+
+    fuel_counts = Counter()
+    off_gas_count = 0
+    electrification_count = 0
+    total_properties = 0
+    fuel_col = None
+
+    hp_tier_counts = Counter()
+    hp_fabric_cost_sum = 0.0
+
+    local_authority_heat = defaultdict(lambda: {'heat_demand_kwh': 0.0, 'property_count': 0})
+    constituency_heat = defaultdict(lambda: {'heat_demand_kwh': 0.0, 'property_count': 0})
+
+    fabric_needs = Counter()
+    wall_type_counts = Counter()
+    energy_consumption_sum = 0.0
+    floor_area_sum = 0.0
+    epc_counts = Counter()
+
+    annual_bill_sum = 0.0
+    annual_emissions_sum = 0.0
+    annual_energy_sum = 0.0
+    annual_bill_sample = []
+    annual_emissions_sample = []
+    annual_bill_seen = 0
+    annual_emissions_seen = 0
+
+    constituency_fuel = defaultdict(lambda: Counter())
+    constituency_counts = Counter()
+    constituency_hp_tiers = defaultdict(lambda: Counter())
+    constituency_epc = defaultdict(lambda: Counter())
+    constituency_sap_sum = defaultdict(float)
+    constituency_sap_count = Counter()
+    constituency_bill_sum = defaultdict(float)
+    constituency_emissions_sum = defaultdict(float)
+    constituency_bill_sample = defaultdict(list)
+    constituency_emissions_sample = defaultdict(list)
+    constituency_bill_seen = Counter()
+    constituency_emissions_seen = Counter()
+    constituency_floor_area_sum = defaultdict(float)
+
+    proximity_sample = []
+    proximity_seen = 0
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    writer = None
+
+    desired_columns = [
+        'POSTCODE',
+        'LOCAL_AUTHORITY',
+        'LOCAL_AUTHORITY_LABEL',
+        'local_authority_name',
+        'region_name',
+        'constituency_name',
+        'MAIN_FUEL',
+        'MAINHEAT_DESCRIPTION',
+        'MAIN_HEATING_FUEL',
+        'CURRENT_ENERGY_RATING',
+        'ENERGY_CONSUMPTION_CURRENT',
+        'TOTAL_FLOOR_AREA',
+        'ROOF_DESCRIPTION',
+        'wall_type',
+        'wall_insulated',
+        'WINDOWS_DESCRIPTION',
+        'FLOOR_DESCRIPTION',
+        'CURRENT_ENERGY_EFFICIENCY',
+    ]
+    selected_columns = select_available_columns(source_path, desired_columns)
+    if not selected_columns:
+        raise ValueError(f"No required columns found in {source_path}")
+
+    console.print(f"[cyan]Chunk size:[/cyan] {batch_size:,} rows")
+    console.print(f"[cyan]Columns loaded:[/cyan] {len(selected_columns)}")
+
+    for df in iter_parquet_batches(source_path, batch_size=batch_size, columns=selected_columns):
+        if needs_enrichment:
+            df = geo.enrich_epc_data(df)
+
+        if fuel_col is None:
+            fuel_col = select_fuel_column(df)
+
+        if fuel_col:
+            df['fuel_category'] = df[fuel_col].apply(fuel_analyzer.categorize_fuel_type)
+            fuel_counts.update(df['fuel_category'].value_counts().to_dict())
+            off_gas_count += (df['fuel_category'] != 'mains_gas').sum()
+            electrification_count += df['fuel_category'].isin(['electric', 'renewable']).sum()
+
+        if 'CURRENT_ENERGY_RATING' in df.columns:
+            df = apply_heat_pump_suitability(df, hp_analyzer.policy_config)
+            hp_tier_counts.update(df['hp_suitability_tier'].value_counts().to_dict())
+            hp_fabric_cost_sum += df['hp_fabric_cost_estimate'].sum()
+
+        if 'ENERGY_CONSUMPTION_CURRENT' in df.columns:
+            df['annual_heat_demand_kwh'] = df['ENERGY_CONSUMPTION_CURRENT']
+        elif 'TOTAL_FLOOR_AREA' in df.columns:
+            df['annual_heat_demand_kwh'] = df['TOTAL_FLOOR_AREA'] * 100
+        else:
+            df['annual_heat_demand_kwh'] = 1000
+
+        for la, values in df.groupby('local_authority_name')['annual_heat_demand_kwh'].agg(['sum', 'count']).iterrows():
+            local_authority_heat[la]['heat_demand_kwh'] += values['sum']
+            local_authority_heat[la]['property_count'] += int(values['count'])
+
+        if 'constituency_name' in df.columns:
+            for const, values in df.groupby('constituency_name')['annual_heat_demand_kwh'].agg(['sum', 'count']).iterrows():
+                constituency_heat[const]['heat_demand_kwh'] += values['sum']
+                constituency_heat[const]['property_count'] += int(values['count'])
+
+        if 'ROOF_DESCRIPTION' in df.columns:
+            fabric_needs['loft'] += df['ROOF_DESCRIPTION'].str.contains(
+                'no insulation|<100mm|100mm|150mm|200mm',
+                case=False,
+                na=False,
+                regex=True
+            ).sum()
+
+        if 'wall_type' in df.columns and 'wall_insulated' in df.columns:
+            needs_wall = ~df['wall_insulated']
+            fabric_needs['wall'] += needs_wall.sum()
+            wall_type_counts.update(df.loc[needs_wall, 'wall_type'].value_counts().to_dict())
+
+        if 'WINDOWS_DESCRIPTION' in df.columns:
+            fabric_needs['glazing'] += df['WINDOWS_DESCRIPTION'].str.contains(
+                'single',
+                case=False,
+                na=False
+            ).sum()
+
+        if 'FLOOR_DESCRIPTION' in df.columns:
+            fabric_needs['floor'] += (~df['FLOOR_DESCRIPTION'].str.contains('insulated', case=False, na=False)).sum()
+
+        if 'ENERGY_CONSUMPTION_CURRENT' in df.columns:
+            energy_consumption_sum += df['ENERGY_CONSUMPTION_CURRENT'].sum()
+        if 'TOTAL_FLOOR_AREA' in df.columns:
+            floor_area_sum += df['TOTAL_FLOOR_AREA'].sum()
+
+        if 'CURRENT_ENERGY_RATING' in df.columns:
+            epc_counts.update(df['CURRENT_ENERGY_RATING'].value_counts().to_dict())
+
+        total_properties += len(df)
+
+        if 'CURRENT_ENERGY_EFFICIENCY' in df.columns and 'constituency_name' in df.columns:
+            sap_group = df.groupby('constituency_name')['CURRENT_ENERGY_EFFICIENCY'].agg(['sum', 'count'])
+            for const, values in sap_group.iterrows():
+                constituency_sap_sum[const] += values['sum']
+                constituency_sap_count[const] += int(values['count'])
+
+        if 'constituency_name' in df.columns:
+            constituency_counts.update(df['constituency_name'].value_counts().to_dict())
+
+        if fuel_col and 'constituency_name' in df.columns:
+            for const, counts in df.groupby('constituency_name')['fuel_category'].value_counts().groupby(level=0):
+                constituency_fuel[const].update(counts.droplevel(0).to_dict())
+
+        if 'hp_suitability_tier' in df.columns and 'constituency_name' in df.columns:
+            for const, counts in df.groupby('constituency_name')['hp_suitability_tier'].value_counts().groupby(level=0):
+                constituency_hp_tiers[const].update(counts.droplevel(0).to_dict())
+
+        if 'CURRENT_ENERGY_RATING' in df.columns and 'constituency_name' in df.columns:
+            for const, counts in df.groupby('constituency_name')['CURRENT_ENERGY_RATING'].value_counts().groupby(level=0):
+                constituency_epc[const].update(counts.droplevel(0).to_dict())
+
+        if 'ENERGY_CONSUMPTION_CURRENT' in df.columns:
+            df['annual_energy_kwh'] = df['ENERGY_CONSUMPTION_CURRENT']
+        elif 'TOTAL_FLOOR_AREA' in df.columns:
+            df['annual_energy_kwh'] = df['TOTAL_FLOOR_AREA'] * 120
+        else:
+            df['annual_energy_kwh'] = 12000
+        annual_energy_sum += df['annual_energy_kwh'].sum()
+
+        current_prices = ci_analyzer.energy_prices.get('current', {})
+        gas_price = current_prices.get('gas', 0.0624)
+        elec_price = current_prices.get('electricity', 0.26)
+
+        if 'fuel_category' in df.columns:
+            gas_mask = df['fuel_category'] == 'mains_gas'
+            elec_mask = df['fuel_category'].isin(['electric', 'renewable'])
+            other_mask = ~gas_mask & ~elec_mask
+
+            df.loc[gas_mask, 'annual_bill'] = df.loc[gas_mask, 'annual_energy_kwh'] / 0.85 * gas_price
+            df.loc[elec_mask, 'annual_bill'] = df.loc[elec_mask, 'annual_energy_kwh'] * elec_price
+            df.loc[other_mask, 'annual_bill'] = df.loc[other_mask, 'annual_energy_kwh'] / 0.85 * gas_price
+        else:
+            df['annual_bill'] = df['annual_energy_kwh'] / 0.85 * gas_price
+
+        df['annual_bill'] = df['annual_bill'] + 100
+        annual_bill_sum += df['annual_bill'].sum()
+
+        current_factors = ci_analyzer.carbon_factors.get('current', {})
+        gas_carbon = current_factors.get('gas', 0.183)
+        elec_carbon = current_factors.get('electricity', 0.233)
+
+        if 'fuel_category' in df.columns:
+            gas_mask = df['fuel_category'] == 'mains_gas'
+            elec_mask = df['fuel_category'].isin(['electric', 'renewable'])
+            other_mask = ~gas_mask & ~elec_mask
+
+            df.loc[gas_mask, 'annual_emissions_kg'] = df.loc[gas_mask, 'annual_energy_kwh'] / 0.85 * gas_carbon
+            df.loc[elec_mask, 'annual_emissions_kg'] = df.loc[elec_mask, 'annual_energy_kwh'] * elec_carbon
+            df.loc[other_mask, 'annual_emissions_kg'] = df.loc[other_mask, 'annual_energy_kwh'] / 0.85 * gas_carbon
+        else:
+            df['annual_emissions_kg'] = df['annual_energy_kwh'] / 0.85 * gas_carbon
+
+        df['annual_emissions_tonnes'] = df['annual_emissions_kg'] / 1000
+        annual_emissions_sum += df['annual_emissions_tonnes'].sum()
+
+        annual_bill_seen = update_reservoir(annual_bill_sample, annual_bill_seen, df['annual_bill'], 100000, rng)
+        annual_emissions_seen = update_reservoir(annual_emissions_sample, annual_emissions_seen, df['annual_emissions_tonnes'], 100000, rng)
+
+        if 'constituency_name' in df.columns:
+            for const, group in df.groupby('constituency_name'):
+                constituency_bill_sum[const] += group['annual_bill'].sum()
+                constituency_emissions_sum[const] += group['annual_emissions_tonnes'].sum()
+                if 'TOTAL_FLOOR_AREA' in group.columns:
+                    constituency_floor_area_sum[const] += group['TOTAL_FLOOR_AREA'].sum()
+                constituency_bill_seen[const] = update_reservoir(
+                    constituency_bill_sample[const],
+                    constituency_bill_seen[const],
+                    group['annual_bill'],
+                    500,
+                    rng
+                )
+                constituency_emissions_seen[const] = update_reservoir(
+                    constituency_emissions_sample[const],
+                    constituency_emissions_seen[const],
+                    group['annual_emissions_tonnes'],
+                    500,
+                    rng
+                )
+
+        if 'POSTCODE' in df.columns:
+            proximity_seen = update_reservoir(proximity_sample, proximity_seen, df['POSTCODE'], 50000, rng)
+
+        if needs_enrichment:
+            table = pa.Table.from_pandas(df, preserve_index=False)
+            if writer is None:
+                writer = pq.ParquetWriter(output_file, table.schema)
+            writer.write_table(table)
+
+    if writer is not None:
+        writer.close()
+        console.print(f"[green]✓[/green] Enriched data saved: {output_file}")
+
+    fuel_percentages = {k: v / total_properties * 100 for k, v in fuel_counts.items()}
+    fuel_results = {
+        'total_properties': total_properties,
+        'fuel_counts': dict(fuel_counts),
+        'fuel_percentages': fuel_percentages,
+        'fuel_category_column': fuel_col
+    }
+
+    off_gas_breakdown = {k: v for k, v in fuel_counts.items() if k != 'mains_gas'}
+    off_gas_results = {
+        'total_off_gas': off_gas_count,
+        'percentage_off_gas': off_gas_count / total_properties * 100 if total_properties else 0,
+        'breakdown': off_gas_breakdown
+    }
+
+    electrification_results = {
+        'electrification_rate': electrification_count / total_properties * 100 if total_properties else 0,
+        'electric_properties': int(electrification_count),
+        'total_properties': total_properties
+    }
+
+    fuel_analyzer.results = {
+        'fuel_mix': fuel_results,
+        'off_gas': off_gas_results,
+        'electrification': electrification_results
+    }
+    fuel_analyzer.save_results()
+
+    tier_percentages = {k: v / total_properties * 100 for k, v in hp_tier_counts.items()}
+    barrier_results = {
+        'tier_counts': dict(hp_tier_counts),
+        'tier_percentages': tier_percentages,
+        'barriers': {
+            'poor_fabric': int(sum(v for k, v in hp_tier_counts.items() if k >= 3)),
+            'very_poor_fabric': int(sum(v for k, v in hp_tier_counts.items() if k >= 4)),
+            'ready_or_minor_work': int(sum(v for k, v in hp_tier_counts.items() if k <= 2)),
+        },
+        'avg_fabric_cost_per_property': float(hp_fabric_cost_sum / total_properties) if total_properties else 0,
+        'total_fabric_investment_needed': float(hp_fabric_cost_sum),
+    }
+
+    hp_analyzer.results = {
+        'barriers': barrier_results
+    }
+    hp_analyzer.save_results()
+
+    local_authority_df = pd.DataFrame([
+        {
+            'local_authority_name': name,
+            'property_count': data['property_count'],
+            'total_heat_demand_gwh': data['heat_demand_kwh'] / 1e6,
+            'heat_density_proxy': data['property_count'],
+            'using_proxy': True
+        }
+        for name, data in local_authority_heat.items()
+        if pd.notna(name)
+    ])
+
+    if not local_authority_df.empty:
+        local_authority_df['density_tier'] = local_authority_df['heat_density_proxy'].apply(
+            lambda x: hn_analyzer.classify_density_tier(x, use_proxy=True)
+        )
+
+        tier_summary = local_authority_df.groupby('density_tier').agg({
+            'property_count': 'sum',
+            'total_heat_demand_gwh': 'sum'
+        }).reset_index()
+        tier_summary['connection_cost_m'] = tier_summary['property_count'] * 5000 / 1e6
+
+        viable_tiers = tier_summary[tier_summary['density_tier'].isin(['high', 'medium'])]
+        network_results = {
+            'total_viable_properties': int(viable_tiers['property_count'].sum()),
+            'total_viable_heat_demand_gwh': float(viable_tiers['total_heat_demand_gwh'].sum()),
+            'total_connection_cost_bn': float(viable_tiers['connection_cost_m'].sum() / 1000),
+            'tier_breakdown': tier_summary.to_dict('records'),
+            'pct_viable': float(viable_tiers['property_count'].sum() / total_properties * 100) if total_properties else 0
+        }
+    else:
+        network_results = {
+            'total_viable_properties': 0,
+            'total_viable_heat_demand_gwh': 0.0,
+            'total_connection_cost_bn': 0.0,
+            'tier_breakdown': [],
+            'pct_viable': 0.0
+        }
+
+    hn_analyzer.results = {
+        'network_potential': network_results
+    }
+    hn_analyzer.save_results()
+
+    fabric_results = {
+        'total_properties': total_properties,
+        'needs_improvement': dict(fabric_needs),
+        'wall_insulation_by_type': dict(wall_type_counts)
+    }
+
+    if energy_consumption_sum > 0:
+        current_demand = energy_consumption_sum / 1e6
+    elif floor_area_sum > 0:
+        current_demand = floor_area_sum * 100 / 1e6
+    else:
+        current_demand = 0
+
+    avg_demand = current_demand * 1e6 / total_properties if total_properties else 0
+    loft_savings_gwh = total_properties * 0.5 * avg_demand * dr_analyzer.FABRIC_MEASURES['loft_insulation']['heat_saving_pct'] / 1e6 if total_properties else 0
+    wall_savings_gwh = total_properties * 0.3 * avg_demand * 0.25 / 1e6 if total_properties else 0
+    glazing_savings_gwh = total_properties * 0.2 * avg_demand * dr_analyzer.FABRIC_MEASURES['double_glazing']['heat_saving_pct'] / 1e6 if total_properties else 0
+    total_savings_gwh = loft_savings_gwh + wall_savings_gwh + glazing_savings_gwh
+
+    savings_results = {
+        'current_total_demand_gwh': float(current_demand),
+        'post_improvement_demand_gwh': float(current_demand - total_savings_gwh),
+        'total_savings_gwh': float(total_savings_gwh),
+        'total_co2_savings_kt': float(total_savings_gwh * 0.183),
+        'total_bill_savings_m': float(total_savings_gwh * 1e6 * 0.0624 / 1e6),
+        'pct_reduction': float(total_savings_gwh / current_demand * 100) if current_demand > 0 else 0
+    }
+
+    epc_bands = dr_analyzer.EPC_BANDS
+    target_epc = dr_analyzer.target_epc
+    better_bands = epc_bands[epc_bands.index(target_epc):]
+    already_compliant = sum(epc_counts.get(band, 0) for band in better_bands)
+    improvement_needed = {
+        'already_compliant': already_compliant,
+        'one_band': epc_counts.get('D', 0),
+        'two_bands': epc_counts.get('E', 0),
+        'three_plus_bands': epc_counts.get('F', 0) + epc_counts.get('G', 0)
+    }
+    needs_improvement = total_properties - already_compliant
+    total_cost_bn = (
+        improvement_needed['one_band'] * 3000 +
+        improvement_needed['two_bands'] * 8000 +
+        improvement_needed['three_plus_bands'] * 15000
+    ) / 1e9
+
+    path_results = {
+        'target_band': target_epc,
+        'total_properties': total_properties,
+        'already_compliant': improvement_needed['already_compliant'],
+        'pct_compliant': float(already_compliant / total_properties * 100) if total_properties else 0,
+        'needs_improvement': int(needs_improvement),
+        'improvement_breakdown': improvement_needed,
+        'estimated_total_cost_bn': float(total_cost_bn),
+        'avg_cost_per_property': float(total_cost_bn * 1e9 / needs_improvement) if needs_improvement else 0
+    }
+
+    national_results = {
+        'sample_size': total_properties,
+        'national_stock_estimate': dr_analyzer.NATIONAL_HOUSING_STOCK,
+        'measures': {}
+    }
+
+    if total_properties > 0:
+        loft_count = fabric_needs.get('loft', 0)
+        loft_pct = loft_count / total_properties
+        national_loft = int(dr_analyzer.NATIONAL_HOUSING_STOCK * loft_pct)
+        national_results['measures']['loft_insulation'] = {
+            'sample_count': loft_count,
+            'sample_percent': round(loft_pct * 100, 1),
+            'national_estimate': national_loft,
+            'cost_per_home': 1200,
+            'total_investment_bn': round(national_loft * 1200 / 1e9, 1)
+        }
+
+    total_investment = sum(
+        measure.get('total_investment_bn', 0)
+        for measure in national_results['measures'].values()
+    )
+    national_results['total_fabric_investment_bn'] = round(total_investment, 1)
+    jobs_per_bn = 12000
+    national_results['estimated_jobs'] = int(total_investment * jobs_per_bn)
+    national_results['ade_jobs_target_2030'] = 200000
+
+    dr_analyzer.results = {
+        'fabric_potential': fabric_results,
+        'savings_potential': savings_results,
+        'path_to_epc_c': path_results,
+        'national_investment': national_results
+    }
+    dr_analyzer.save_results()
+
+    annual_bill_series = pd.Series(annual_bill_sample)
+    annual_emissions_series = pd.Series(annual_emissions_sample)
+
+    household_bills = {
+        'total_properties': total_properties,
+        'avg_annual_bill': float(annual_bill_sum / total_properties) if total_properties else 0,
+        'median_annual_bill': float(annual_bill_series.median()) if not annual_bill_series.empty else 0,
+        'bill_25th_percentile': float(annual_bill_series.quantile(0.25)) if not annual_bill_series.empty else 0,
+        'bill_75th_percentile': float(annual_bill_series.quantile(0.75)) if not annual_bill_series.empty else 0,
+        'total_annual_bills_bn': float(annual_bill_sum / 1e9),
+        'avg_energy_consumption_kwh': float(annual_energy_sum / total_properties) if total_properties else 0,
+        'gas_price_used': gas_price,
+        'electricity_price_used': elec_price
+    }
+
+    household_emissions = {
+        'avg_emissions_tonnes': float(annual_emissions_sum / total_properties) if total_properties else 0,
+        'median_emissions_tonnes': float(annual_emissions_series.median()) if not annual_emissions_series.empty else 0,
+        'total_emissions_mt': float(annual_emissions_sum / 1e6),
+        'emissions_25th_percentile': float(annual_emissions_series.quantile(0.25)) if not annual_emissions_series.empty else 0,
+        'emissions_75th_percentile': float(annual_emissions_series.quantile(0.75)) if not annual_emissions_series.empty else 0,
+        'gas_carbon_factor': gas_carbon,
+        'electricity_carbon_factor': elec_carbon
+    }
+
+    avg_demand_kwh = annual_energy_sum / total_properties if total_properties else 12000
+    hp_scop = ci_analyzer.config.get('heat_pump', {}).get('scop', 3.0)
+    gas_boiler_efficiency = 0.85
+
+    price_scenarios = ci_analyzer.financial.get('price_scenarios', {})
+    running_cost_comparison = {
+        'avg_heat_demand_kwh': float(avg_demand_kwh),
+        'heat_pump_scop': hp_scop,
+        'gas_boiler_efficiency': gas_boiler_efficiency,
+        'scenarios': {}
+    }
+
+    for scenario_name, prices in price_scenarios.items():
+        gas_price_s = prices.get('gas', 0.0624)
+        elec_price_s = prices.get('electricity', 0.26)
+        gas_cost = (avg_demand_kwh / gas_boiler_efficiency) * gas_price_s
+        hp_cost = (avg_demand_kwh / hp_scop) * elec_price_s
+        running_cost_comparison['scenarios'][scenario_name] = {
+            'name': prices.get('name', scenario_name),
+            'gas_price': gas_price_s,
+            'electricity_price': elec_price_s,
+            'gas_boiler_annual_cost': round(gas_cost, 0),
+            'heat_pump_annual_cost': round(hp_cost, 0),
+            'hp_vs_gas_difference': round(hp_cost - gas_cost, 0),
+            'heat_pump_cheaper': hp_cost < gas_cost,
+            'annual_savings': round(abs(gas_cost - hp_cost), 0),
+            'savings_percent': round((abs(gas_cost - hp_cost) / gas_cost * 100), 1) if gas_cost else 0
+        }
+
+    ci_analyzer.results = {
+        'household_bills': household_bills,
+        'household_emissions': household_emissions,
+        'running_cost_comparison': running_cost_comparison
+    }
+    ci_analyzer.save_results()
+
+    suitable_properties = sum(epc_counts.get(band, 0) for band in ['A', 'B', 'C', 'D'])
+    existing_hp = fuel_counts.get('renewable', 0)
+    gas_properties = fuel_counts.get('mains_gas', 0)
+    low_carbon = fuel_counts.get('electric', 0) + fuel_counts.get('renewable', 0) + fuel_counts.get('heat_network', 0)
+
+    current_year = time.localtime().tm_year
+    target_year = 2028
+    current_rate = ps_analyzer.POLICY_TARGETS['heat_pump_current_rate']
+    target_rate = ps_analyzer.POLICY_TARGETS['heat_pump_target_2028']
+    years_remaining = target_year - current_year
+    multiplier_needed = target_rate / current_rate if current_rate else 0
+    cagr_needed = (target_rate / current_rate) ** (1 / years_remaining) - 1 if years_remaining > 0 else 0
+
+    installation_rate_results = {
+        'current_annual_rate': current_rate,
+        'target_annual_rate_2028': target_rate,
+        'multiplier_needed': round(multiplier_needed, 1),
+        'years_to_target': years_remaining,
+        'cagr_needed_percent': round(cagr_needed * 100, 1),
+        'uk_ranking_heat_pumps': '21st of 21 (last in Europe)',
+        'suitable_properties_in_data': int(suitable_properties),
+        'existing_heat_pumps_estimate': int(existing_hp),
+        'remaining_potential': int(suitable_properties - existing_hp),
+        'years_to_complete_at_current_rate': round((suitable_properties - existing_hp) / current_rate, 0) if current_rate else 0,
+        'years_to_complete_at_target_rate': round((suitable_properties - existing_hp) / target_rate, 0) if target_rate else 0
+    }
+
+    phaseout_year = ps_analyzer.POLICY_TARGETS['boiler_phaseout_year']
+    years_remaining = phaseout_year - current_year
+    annual_conversion_needed = gas_properties / years_remaining if years_remaining > 0 else gas_properties
+    multiplier_vs_current = annual_conversion_needed / current_rate if current_rate else 0
+    boiler_phaseout_results = {
+        'phaseout_year': phaseout_year,
+        'years_remaining': years_remaining,
+        'total_properties': int(total_properties),
+        'gas_heated_properties': int(gas_properties),
+        'gas_percentage': round(gas_properties / total_properties * 100, 1) if total_properties else 0,
+        'already_low_carbon': int(low_carbon),
+        'conversions_needed': int(gas_properties),
+        'annual_conversions_needed': int(annual_conversion_needed),
+        'vs_current_hp_rate': f"{multiplier_vs_current:.0f}x current rate",
+        'implied_monthly_conversions': int(annual_conversion_needed / 12) if years_remaining > 0 else 0,
+        'implied_daily_conversions': int(annual_conversion_needed / 365) if years_remaining > 0 else 0
+    }
+
+    current_prices = ps_analyzer.financial.get('price_scenarios', {}).get('baseline', {})
+    rebalanced_prices = ps_analyzer.financial.get('price_scenarios', {}).get('rebalanced', {})
+    gas_cost_current = (avg_demand_kwh / 0.85) * current_prices.get('gas', 0.0624)
+    hp_cost_current = (avg_demand_kwh / hp_scop) * current_prices.get('electricity', 0.26)
+    gas_cost_rebalanced = (avg_demand_kwh / 0.85) * rebalanced_prices.get('gas', 0.10)
+    hp_cost_rebalanced = (avg_demand_kwh / hp_scop) * rebalanced_prices.get('electricity', 0.15)
+
+    price_rebalancing_results = {
+        'avg_heat_demand_kwh': float(avg_demand_kwh),
+        'current_prices': {
+            'gas_price': current_prices.get('gas', 0.0624),
+            'electricity_price': current_prices.get('electricity', 0.26),
+            'gas_boiler_annual_cost': round(gas_cost_current, 0),
+            'heat_pump_annual_cost': round(hp_cost_current, 0),
+            'hp_vs_gas_difference': round(hp_cost_current - gas_cost_current, 0),
+            'hp_premium_percent': round((hp_cost_current / gas_cost_current - 1) * 100, 1) if gas_cost_current else 0
+        },
+        'rebalanced_prices': {
+            'gas_price': rebalanced_prices.get('gas', 0.10),
+            'electricity_price': rebalanced_prices.get('electricity', 0.15),
+            'gas_boiler_annual_cost': round(gas_cost_rebalanced, 0),
+            'heat_pump_annual_cost': round(hp_cost_rebalanced, 0),
+            'hp_vs_gas_difference': round(hp_cost_rebalanced - gas_cost_rebalanced, 0),
+            'hp_saving_percent': round((1 - hp_cost_rebalanced / gas_cost_rebalanced) * 100, 1) if gas_cost_rebalanced else 0
+        },
+        'policy_impact': {
+            'current_hp_premium': round(hp_cost_current - gas_cost_current, 0),
+            'rebalanced_hp_saving': round(gas_cost_rebalanced - hp_cost_rebalanced, 0),
+            'total_improvement': round((hp_cost_current - gas_cost_current) - (hp_cost_rebalanced - gas_cost_rebalanced), 0)
+        }
+    }
+
+    needs_insulation = epc_counts.get('D', 0) + epc_counts.get('E', 0) + epc_counts.get('F', 0) + epc_counts.get('G', 0)
+    needs_heating_upgrade = fuel_counts.get('mains_gas', 0) + fuel_counts.get('oil', 0) + fuel_counts.get('lpg', 0) + fuel_counts.get('coal', 0)
+    retrofit_investment_bn = (needs_insulation * 8000) / 1e9
+    heating_investment_bn = (needs_heating_upgrade * 12000) / 1e9
+    total_investment_bn = retrofit_investment_bn + heating_investment_bn
+    retrofit_jobs = retrofit_investment_bn * 1000 * 12
+    heating_jobs = heating_investment_bn * 1000 * 4
+    total_jobs = retrofit_jobs + heating_jobs
+
+    job_creation_results = {
+        'properties_needing_retrofit': int(needs_insulation),
+        'properties_needing_heating_upgrade': int(needs_heating_upgrade),
+        'estimated_retrofit_investment_bn': round(retrofit_investment_bn, 1),
+        'estimated_heating_investment_bn': round(heating_investment_bn, 1),
+        'total_investment_potential_bn': round(total_investment_bn, 1),
+        'jobs_from_retrofit': int(retrofit_jobs),
+        'jobs_from_heating': int(heating_jobs),
+        'total_jobs_potential': int(total_jobs),
+        'ade_target_2030': ps_analyzer.POLICY_TARGETS['jobs_target_2030'],
+        'vs_ade_target': f"{total_jobs / ps_analyzer.POLICY_TARGETS['jobs_target_2030'] * 100:.0f}% of ADE target" if ps_analyzer.POLICY_TARGETS['jobs_target_2030'] else "0%"
+    }
+
+    ps_analyzer.results = {
+        'price_rebalancing': price_rebalancing_results,
+        'installation_rates': installation_rate_results,
+        'boiler_phaseout': boiler_phaseout_results,
+        'job_creation': job_creation_results
+    }
+    ps_analyzer.save_results()
+
+    results = {
+        'fuel': fuel_analyzer.results,
+        'heat_pump': hp_analyzer.results,
+        'heat_network': hn_analyzer.results,
+        'demand_reduction': dr_analyzer.results,
+        'consumer_impact': ci_analyzer.results,
+        'policy_scenarios': ps_analyzer.results
+    }
+
+    constituency_outputs = {}
+    if constituency_counts:
+        fuel_rows = []
+        for const, counts in constituency_fuel.items():
+            total = constituency_counts.get(const, 0)
+            row = {'geography': const, 'geography_level': 'constituency', 'total_properties': total}
+            for category in fuel_analyzer.FUEL_CATEGORIES.keys():
+                row[category] = counts.get(category, 0) / total * 100 if total else 0
+            fuel_rows.append(row)
+        fuel_df = pd.DataFrame(fuel_rows)
+        output_path = DATA_OUTPUTS_DIR / "constituency_fuel_mix.csv"
+        fuel_df.to_csv(output_path, index=False)
+        constituency_outputs['fuel_mix'] = output_path
+
+        hp_rows = []
+        for const, counts in constituency_hp_tiers.items():
+            total = constituency_counts.get(const, 0)
+            hp_rows.append({
+                'geography': const,
+                'total_properties': total,
+                'tier_1_ready': counts.get(1, 0),
+                'tier_2_minor': counts.get(2, 0),
+                'tier_3_moderate': counts.get(3, 0),
+                'tier_4_major': counts.get(4, 0),
+                'tier_5_challenging': counts.get(5, 0),
+                'pct_ready_or_minor': (counts.get(1, 0) + counts.get(2, 0)) / total * 100 if total else 0
+            })
+        hp_df = pd.DataFrame(hp_rows)
+        output_path = DATA_OUTPUTS_DIR / "constituency_heat_pump_potential.csv"
+        hp_df.to_csv(output_path, index=False)
+        constituency_outputs['heat_pump'] = output_path
+
+        hn_rows = []
+        for const, data in constituency_heat.items():
+            hn_rows.append({
+                'geography': const,
+                'property_count': data['property_count'],
+                'total_heat_demand_gwh': data['heat_demand_kwh'] / 1e6,
+                'heat_density_proxy': data['property_count'],
+                'density_tier': hn_analyzer.classify_density_tier(data['property_count'], use_proxy=True)
+            })
+        hn_df = pd.DataFrame(hn_rows)
+        output_path = DATA_OUTPUTS_DIR / "constituency_heat_network_potential.csv"
+        hn_df.to_csv(output_path, index=False)
+        constituency_outputs['heat_network'] = output_path
+
+        epc_rows = []
+        for const, counts in constituency_epc.items():
+            total = constituency_counts.get(const, 0)
+            compliant = sum(counts.get(band, 0) for band in ['A', 'B', 'C'])
+            row = {'constituency_name': const, 'total_properties': total}
+            for band, count in counts.items():
+                row[band] = count / total * 100 if total else 0
+            row['pct_epc_c_plus'] = compliant / total * 100 if total else 0
+            if constituency_sap_count.get(const):
+                row['avg_sap_score'] = constituency_sap_sum[const] / constituency_sap_count[const]
+            epc_rows.append(row)
+        epc_df = pd.DataFrame(epc_rows)
+        output_path = DATA_OUTPUTS_DIR / "constituency_epc_distribution.csv"
+        epc_df.to_csv(output_path, index=False)
+        constituency_outputs['epc_distribution'] = output_path
+
+        consumer_rows = []
+        for const, total in constituency_counts.items():
+            bills = pd.Series(constituency_bill_sample[const])
+            emissions = pd.Series(constituency_emissions_sample[const])
+            consumer_rows.append({
+                'constituency_name': const,
+                'avg_annual_bill': constituency_bill_sum[const] / total if total else 0,
+                'median_annual_bill': float(bills.median()) if not bills.empty else 0,
+                'total_annual_bills': constituency_bill_sum[const],
+                'avg_emissions_tonnes': constituency_emissions_sum[const] / total if total else 0,
+                'total_emissions_tonnes': constituency_emissions_sum[const],
+                'total_properties': total
+            })
+        consumer_df = pd.DataFrame(consumer_rows)
+        output_path = DATA_OUTPUTS_DIR / "constituency_consumer_impact.csv"
+        consumer_df.to_csv(output_path, index=False)
+        constituency_outputs['consumer_impact'] = output_path
+
+        summary_rows = []
+        for const, total in constituency_counts.items():
+            summary_rows.append({
+                'constituency_name': const,
+                'total_properties': total,
+                'avg_floor_area': constituency_floor_area_sum[const] / total if total else 0,
+                'pct_gas_heated': (constituency_fuel[const].get('mains_gas', 0) / total * 100) if total else 0,
+                'pct_hp_ready': (constituency_hp_tiers[const].get(1, 0) + constituency_hp_tiers[const].get(2, 0)) / total * 100 if total else 0
+            })
+        summary_df = pd.DataFrame(summary_rows)
+        output_path = DATA_OUTPUTS_DIR / "constituency_summary.csv"
+        summary_df.to_csv(output_path, index=False)
+        constituency_outputs['summary'] = output_path
+
+    proximity_results = None
+    if proximity_sample:
+        sample_df = pd.DataFrame({'POSTCODE': proximity_sample})
+        _, proximity_results = phase_3b_heat_network_proximity(sample_df)
+
+    return results, constituency_outputs, proximity_results
 
 
 def print_header():
@@ -786,7 +1609,25 @@ def main():
             console.print(f"[green]✓[/green] Loaded {len(df_validated):,} validated records")
         except Exception as e:
             console.print(f"[red]✗[/red] Failed to load validated data: {e}")
-            console.print("[yellow]Consider running phases 3-5 separately with chunked processing[/yellow]")
+            console.print("[yellow]Consider running phases 3-5 with chunked processing[/yellow]")
+            if Confirm.ask("Run phases 3-5 with chunked processing now?", default=True):
+                results, constituency_outputs, proximity_results = run_chunked_pipeline(validated_path)
+                if proximity_results:
+                    results['heat_network_proximity'] = proximity_results
+                report_path = phase_5_reporting(results)
+                elapsed = time.time() - start_time
+                total_props = results.get('fuel', {}).get('fuel_mix', {}).get('total_properties', 0)
+                console.print()
+                console.print(Panel.fit(
+                    f"[bold green]✓ Analysis Complete![/bold green]\n\n"
+                    f"Time elapsed: {elapsed/60:.1f} minutes\n"
+                    f"Properties analyzed: {total_props:,}\n\n"
+                    f"[cyan]Results:[/cyan]\n"
+                    f"  • Summary report: {report_path}\n"
+                    f"  • Detailed outputs: {DATA_OUTPUTS_DIR}",
+                    border_style="green"
+                ))
+                return
             return
 
         # Phase 3: Geographic Enrichment
