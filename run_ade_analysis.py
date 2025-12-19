@@ -666,13 +666,15 @@ def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
         gas_cost = (avg_demand_kwh / gas_boiler_efficiency) * gas_price_s
         hp_cost = (avg_demand_kwh / hp_scop) * elec_price_s
         running_cost_comparison['scenarios'][scenario_name] = {
+            'name': prices.get('name', scenario_name),
             'gas_price': gas_price_s,
             'electricity_price': elec_price_s,
             'gas_boiler_annual_cost': round(gas_cost, 0),
             'heat_pump_annual_cost': round(hp_cost, 0),
             'hp_vs_gas_difference': round(hp_cost - gas_cost, 0),
             'heat_pump_cheaper': hp_cost < gas_cost,
-            'annual_savings': round(abs(gas_cost - hp_cost), 0)
+            'annual_savings': round(abs(gas_cost - hp_cost), 0),
+            'savings_percent': round((abs(gas_cost - hp_cost) / gas_cost * 100), 1) if gas_cost else 0
         }
 
     ci_analyzer.results = {
