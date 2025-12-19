@@ -606,6 +606,15 @@ def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
             'total_investment_bn': round(national_loft * 1200 / 1e9, 1)
         }
 
+    total_investment = sum(
+        measure.get('total_investment_bn', 0)
+        for measure in national_results['measures'].values()
+    )
+    national_results['total_fabric_investment_bn'] = round(total_investment, 1)
+    jobs_per_bn = 12000
+    national_results['estimated_jobs'] = int(total_investment * jobs_per_bn)
+    national_results['ade_jobs_target_2030'] = 200000
+
     dr_analyzer.results = {
         'fabric_potential': fabric_results,
         'savings_potential': savings_results,
