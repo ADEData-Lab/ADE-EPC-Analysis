@@ -131,7 +131,8 @@ class HeatNetworkZoneProximityAnalyzer:
     def calculate_proximity(
         self,
         properties_gdf: gpd.GeoDataFrame,
-        filter_status: Optional[list] = None
+        filter_status: Optional[list] = None,
+        chunk_size: int = 10000
     ) -> gpd.GeoDataFrame:
         """
         Calculate proximity of properties to heat networks.
@@ -140,6 +141,7 @@ class HeatNetworkZoneProximityAnalyzer:
             properties_gdf: GeoDataFrame of properties with point geometries
             filter_status: Optional list of development statuses to include
                           (e.g., ['Operational', 'Under Construction'])
+            chunk_size: Process properties in chunks to reduce memory usage
 
         Returns:
             GeoDataFrame with added proximity columns
@@ -147,7 +149,7 @@ class HeatNetworkZoneProximityAnalyzer:
         if self.heat_networks_gdf is None:
             self.load_heat_network_data()
 
-        logger.info(f"Calculating proximity for {len(properties_gdf):,} properties...")
+        logger.info(f"Calculating proximity for {len(properties_gdf):,} properties (chunk_size={chunk_size:,})...")
 
         # Filter heat networks by status if specified
         hn_gdf = self.heat_networks_gdf.copy()
@@ -160,14 +162,28 @@ class HeatNetworkZoneProximityAnalyzer:
             logger.info("Reprojecting properties to British National Grid (EPSG:27700)")
             properties_gdf = properties_gdf.to_crs("EPSG:27700")
 
-        # Create union of all heat network points
+        # Create union of all heat network points (only once)
         hn_union = unary_union(hn_gdf.geometry)
 
-        # Calculate distance to nearest heat network (meters)
+        # Calculate distance to nearest heat network in chunks to reduce memory
         logger.info("Computing distances to nearest heat network...")
-        properties_gdf['distance_to_hn_m'] = properties_gdf.geometry.apply(
-            lambda pt: pt.distance(hn_union)
-        )
+
+        # Process in chunks
+        num_chunks = (len(properties_gdf) + chunk_size - 1) // chunk_size
+        distances = []
+
+        for i in range(num_chunks):
+            start_idx = i * chunk_size
+            end_idx = min((i + 1) * chunk_size, len(properties_gdf))
+            chunk = properties_gdf.iloc[start_idx:end_idx]
+
+            if (i + 1) % max(1, num_chunks // 10) == 0 or i == 0:
+                logger.info(f"  Processing chunk {i+1}/{num_chunks} ({start_idx:,} to {end_idx:,})...")
+
+            chunk_distances = chunk.geometry.apply(lambda pt: pt.distance(hn_union))
+            distances.extend(chunk_distances.tolist())
+
+        properties_gdf['distance_to_hn_m'] = distances
 
         logger.info(f"Distance statistics:")
         logger.info(f"  Min: {properties_gdf['distance_to_hn_m'].min():.0f}m")
