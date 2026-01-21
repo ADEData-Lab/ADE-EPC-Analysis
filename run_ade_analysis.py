@@ -46,6 +46,7 @@ from src.analysis.consumer_impact_analysis import ConsumerImpactAnalyzer
 from src.analysis.policy_scenarios import PolicyScenarioAnalyzer
 from src.spatial.postcode_geocoder import PostcodeGeocoder
 from src.spatial.heat_network_zone_proximity import HeatNetworkZoneProximityAnalyzer
+from src.utils.memory_utils import log_memory, MemoryMonitor
 
 console = Console()
 
@@ -178,6 +179,8 @@ def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
     console.print()
     console.print("[cyan]Running chunked processing for phases 3-5...[/cyan]")
 
+    log_memory("Pipeline start")
+
     output_file = DATA_PROCESSED_DIR / "epc_england_wales_enriched.parquet"
     source_path = validated_path
     needs_enrichment = True
@@ -272,7 +275,12 @@ def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
     console.print(f"[cyan]Chunk size:[/cyan] {batch_size:,} rows")
     console.print(f"[cyan]Columns loaded:[/cyan] {len(selected_columns)}")
 
+    chunk_num = 0
     for df in iter_parquet_batches(source_path, batch_size=batch_size, columns=selected_columns):
+        chunk_num += 1
+
+        if chunk_num % 5 == 1:  # Log every 5th chunk
+            log_memory(f"Processing chunk {chunk_num} ({len(df):,} rows)", level="debug")
         if needs_enrichment:
             df = geo.enrich_epc_data(df)
 
@@ -440,6 +448,8 @@ def run_chunked_pipeline(validated_path: Path, batch_size: int = 100000):
     if writer is not None:
         writer.close()
         console.print(f"[green]✓[/green] Enriched data saved: {output_file}")
+
+    log_memory("After chunked processing")
 
     fuel_percentages = {k: v / total_properties * 100 for k, v in fuel_counts.items()}
     fuel_results = {
@@ -1141,20 +1151,41 @@ def phase_3b_heat_network_proximity(df, sample_size: int | None = None):
     else:
         df_sample = df
 
-    cache_file = DATA_OUTPUTS_DIR / "geocoding_cache.csv"
-    geocoder = PostcodeGeocoder(cache_file=cache_file)
-    properties_gdf = geocoder.geocode_dataframe(df_sample, postcode_column='POSTCODE', batch_mode=True)
+    # Check if coordinates already exist to avoid repeated geocoding
+    has_coords = 'LATITUDE' in df_sample.columns and 'LONGITUDE' in df_sample.columns
+
+    if has_coords:
+        console.print("[green]Using existing coordinates from dataset (skipping geocoding)[/green]")
+        # Create GeoDataFrame from existing coordinates
+        from shapely.geometry import Point
+        geometry = [
+            Point(lon, lat) if pd.notna(lon) and pd.notna(lat) else None
+            for lon, lat in zip(df_sample['LONGITUDE'], df_sample['LATITUDE'])
+        ]
+        properties_gdf = gpd.GeoDataFrame(df_sample, geometry=geometry, crs='EPSG:4326')
+        properties_gdf = properties_gdf[properties_gdf.geometry.notna()].copy()
+        console.print(f"  Created GeoDataFrame from {len(properties_gdf):,} properties with coordinates")
+    else:
+        console.print("[cyan]No coordinates found - geocoding from postcodes...[/cyan]")
+        cache_file = DATA_OUTPUTS_DIR / "geocoding_cache.csv"
+
+        with MemoryMonitor("Geocoding properties"):
+            geocoder = PostcodeGeocoder(cache_file=cache_file)
+            properties_gdf = geocoder.geocode_dataframe(df_sample, postcode_column='POSTCODE', batch_mode=True)
 
     if properties_gdf is None or properties_gdf.empty:
         console.print("[red]No properties could be geocoded - skipping heat network proximity[/red]")
         return None, None
 
     # Project to British National Grid for distance calculations
+    log_memory("Before CRS projection")
     properties_gdf = properties_gdf.to_crs("EPSG:27700")
+    log_memory("After CRS projection")
 
-    analyzer = HeatNetworkZoneProximityAnalyzer()
-    analyzer.load_heat_network_data()
-    properties_gdf = analyzer.calculate_proximity(properties_gdf)
+    with MemoryMonitor("Heat network proximity calculation"):
+        analyzer = HeatNetworkZoneProximityAnalyzer()
+        analyzer.load_heat_network_data()
+        properties_gdf = analyzer.calculate_proximity(properties_gdf, chunk_size=10000)
 
     # Save property-level sample output
     output_df = properties_gdf.copy()
@@ -1171,7 +1202,11 @@ def phase_3b_heat_network_proximity(df, sample_size: int | None = None):
         lookup_file = DATA_SUPPLEMENTARY_DIR / "constituency_lookup.csv"
         if lookup_file.exists():
             lookup_df = pd.read_csv(lookup_file)
-            properties_gdf = properties_gdf.merge(lookup_df, how='left', on='CONSTITUENCY')
+            # Use Series.map to avoid losing GeoDataFrame geometry in merge
+            for col in lookup_df.columns:
+                if col != 'CONSTITUENCY' and col not in properties_gdf.columns:
+                    lookup_map = dict(zip(lookup_df['CONSTITUENCY'], lookup_df[col]))
+                    properties_gdf[col] = properties_gdf['CONSTITUENCY'].map(lookup_map)
 
         constituency_summary = analyzer.analyze_by_constituency(properties_gdf, constituency_col='CONSTITUENCY')
         if len(constituency_summary) > 0:
